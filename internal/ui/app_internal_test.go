@@ -25,6 +25,10 @@ func TestViewRendersHelpFromKeymap(t *testing.T) {
 		Return(core.ContextInfo{Name: "dev-01", Namespace: "trading-service", Current: true}).
 		AnyTimes()
 
+	contexts.EXPECT().Contexts().
+		Return([]core.ContextInfo{{Name: "dev-01", Cluster: "charlie", Namespace: "trading-service", Current: true}}).
+		AnyTimes()
+
 	m := New(zap.NewNop(), contexts)
 	m.keys.Quit = key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "exit"))
 

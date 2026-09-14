@@ -11,6 +11,7 @@ import (
 	"github.com/mo-pankaj/kctl/internal/ui/keys"
 	"github.com/mo-pankaj/kctl/internal/ui/stack"
 	"github.com/mo-pankaj/kctl/internal/ui/statusbar"
+	"github.com/mo-pankaj/kctl/internal/ui/views/ctxpicker"
 )
 
 // Model is the kctl root model.
@@ -41,11 +42,18 @@ func New(logger *zap.Logger, contexts core.ContextManager) (m Model) {
 	m.status.Context = current.Name
 	m.status.Namespace = current.Namespace
 
+	m.stack.Push(ctxpicker.New(m.logger, styles, m.keys, contexts))
+
 	return m
 }
 
 // Init satisfies tea.Model.
 func (m Model) Init() (cmd tea.Cmd) {
+	top := m.stack.Top()
+	if top != nil {
+		cmd = top.Init()
+	}
+
 	return cmd
 }
 
@@ -57,6 +65,17 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.height = msg.Height
 		m.status.Width = msg.Width
 		// Fall through so the visible view also learns the new size.
+
+	case ctxpicker.SwitchedMsg:
+		m.status.Context = msg.Context.Name
+		m.status.Namespace = msg.Context.Namespace
+		m.status.Message = ""
+
+		return m, cmd
+
+	case ctxpicker.ErrorMsg:
+		m.status.Message = msg.Err.Error()
+		// Fall through so the picker renders its own error state too.
 
 	case tea.KeyPressMsg:
 		if key.Matches(msg, m.keys.Quit) {
