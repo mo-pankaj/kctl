@@ -2,6 +2,8 @@
 package ui
 
 import (
+	"context"
+
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"go.uber.org/zap"
@@ -26,17 +28,19 @@ type inputFocuser interface {
 
 // Model is the kctl root model.
 type Model struct {
-	logger   *zap.Logger
-	keys     keys.Map
-	styles   theme.Styles
-	contexts core.ContextManager
-	pods     core.PodReader
-	sel      core.Selector
-	status   statusbar.Model
-	cmdBar   cmdbar.Model
-	stack    stack.Stack
-	width    int
-	height   int
+	logger    *zap.Logger
+	keys      keys.Map
+	styles    theme.Styles
+	contexts  core.ContextManager
+	pods      core.PodReader
+	sel       core.Selector
+	session   *Session
+	switching bool
+	status    statusbar.Model
+	cmdBar    cmdbar.Model
+	stack     stack.Stack
+	width     int
+	height    int
 }
 
 // New builds the root model.
@@ -63,6 +67,16 @@ func New(logger *zap.Logger, contexts core.ContextManager, pods core.PodReader, 
 	return m
 }
 
+// WithSession attaches the session that rebuilds data sources on a context or
+// namespace switch. Without one the model still runs against a single fixed
+// source, which is what the view tests use.
+func (m Model) WithSession(session *Session) (out Model) {
+	m.session = session
+	out = m
+
+	return out
+}
+
 // Init satisfies tea.Model.
 func (m Model) Init() (cmd tea.Cmd) {
 	top := m.stack.Top()
@@ -83,11 +97,42 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// Fall through so the visible view also learns the new size.
 
 	case ctxpicker.SwitchedMsg:
-		m.status.Context = msg.Context.Name
-		m.status.Namespace = msg.Context.Namespace
-		m.status.Message = ""
+		if m.session == nil {
+			// No factory wired (tests, or a single-source build): just relabel.
+			m.status.Context = msg.Context.Name
+			m.status.Namespace = msg.Context.Namespace
+			m.status.Message = ""
 
-		return m, cmd
+			return m, cmd
+		}
+
+		m.status.Connecting = true
+		m.status.Message = ""
+		m.switching = true
+		m.stack.Pop()
+
+		return m, m.switchTo(msg.Context.Name, msg.Context.Namespace)
+
+	case switchedMsg:
+		m.status.Connecting = false
+		m.switching = false
+
+		if msg.Err != nil {
+			// Stay put. Leaving the user on a dead context with an empty list
+			// is worse than staying where they were with an error.
+			m.status.Message = msg.Err.Error()
+
+			return m, cmd
+		}
+
+		m.pods = msg.Active.Pods
+		m.sel = core.Selector{Namespace: msg.Active.Namespace}
+		m.status.Context = msg.Active.Context
+		m.status.Namespace = msg.Active.Namespace
+		m.status.Message = ""
+		m.stack.Replace(podlist.New(m.logger, m.styles, m.keys, m.pods, m.sel))
+
+		return m, m.stack.Top().Init()
 
 	case ctxpicker.ErrorMsg:
 		m.status.Message = msg.Err.Error()
@@ -164,6 +209,29 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	m.stack.Replace(updated)
 
 	return m, cmd
+}
+
+// switchedMsg reports the outcome of a context or namespace switch.
+type switchedMsg struct {
+	Active Active
+	Err    error
+}
+
+// switchTo rebuilds the data sources for a context and namespace, off the
+// update loop so the UI stays responsive while the cache syncs.
+func (m Model) switchTo(contextName, namespace string) (cmd tea.Cmd) {
+	session := m.session
+	if session == nil {
+		return cmd
+	}
+
+	cmd = func() tea.Msg {
+		active, err := session.Switch(context.Background(), contextName, namespace)
+
+		return switchedMsg{Active: active, Err: err}
+	}
+
+	return cmd
 }
 
 // runCommand applies a parsed command bar command.

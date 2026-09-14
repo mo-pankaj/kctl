@@ -48,32 +48,50 @@ func run() (code int) {
 
 	current := store.Current()
 
-	restCfg, err := store.RESTConfig(current.Name)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "kctl: %v\n", err)
-		return 1
-	}
-
-	client, err := kube.NewClientset(restCfg)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "kctl: %v\n", err)
-		return 1
-	}
-
-	source := kube.NewPodSource(logger, client, current.Namespace)
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	err = source.Start(ctx)
+	// The factory rebuilds a clientset and informer for whatever context the
+	// user switches to; the session owns teardown of the previous one.
+	factory := func(ctx context.Context, contextName, namespace string) (core.PodReader, core.NamespaceLister, error) {
+		cfg, err := store.RESTConfig(contextName)
+		if err != nil {
+			err = fmt.Errorf("error-building-rest-config :%w", err)
+			return nil, nil, err
+		}
+
+		c, err := kube.NewClientset(cfg)
+		if err != nil {
+			err = fmt.Errorf("error-building-clientset :%w", err)
+			return nil, nil, err
+		}
+
+		src := kube.NewPodSource(logger, c, namespace)
+
+		err = src.Start(ctx)
+		if err != nil {
+			err = fmt.Errorf("error-starting-pod-source :%w", err)
+			return nil, nil, err
+		}
+
+		return src, kube.NewNamespaceStore(logger, c), nil
+	}
+
+	session := ui.NewSession(logger, factory)
+	defer session.Close()
+
+	// The session owns every source, including the first, so a later switch
+	// tears this one down instead of leaving it running for the whole session.
+	active, err := session.Switch(ctx, current.Name, current.Namespace)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "kctl: cannot reach cluster %s: %v\n", current.Server, err)
 		return 1
 	}
 
-	sel := core.Selector{Namespace: current.Namespace}
+	model := ui.New(logger, store, active.Pods, core.Selector{Namespace: active.Namespace}).
+		WithSession(session)
 
-	program := tea.NewProgram(ui.New(logger, store, source, sel))
+	program := tea.NewProgram(model)
 
 	_, err = program.Run()
 	if err != nil {
