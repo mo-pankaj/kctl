@@ -2,6 +2,8 @@
 package ui
 
 import (
+	"fmt"
+
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"go.uber.org/zap"
@@ -50,6 +52,7 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 // View satisfies tea.Model.
 func (m Model) View() (s string) {
-	s = "kctl\n\npress q to quit\n"
+	help := m.keys.Quit.Help()
+	s = fmt.Sprintf("kctl\n\npress %s to %s\n", help.Key, help.Desc)
 	return s
 }

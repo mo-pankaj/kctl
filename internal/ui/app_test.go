@@ -2,6 +2,7 @@ package ui_test
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/mo-pankaj/kctl/internal/ui"
+	"github.com/mo-pankaj/kctl/internal/ui/keys"
 )
 
 func TestAppRendersAndQuitsOnQ(t *testing.T) {
@@ -24,4 +26,15 @@ func TestAppRendersAndQuitsOnQ(t *testing.T) {
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 
 	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
+}
+
+func TestAppViewRendersQuitHintFromKeymap(t *testing.T) {
+	m := ui.New(zap.NewNop())
+
+	view := m.View()
+
+	help := keys.Default().Quit.Help()
+	if !strings.Contains(view, help.Key) {
+		t.Fatalf("View() = %q, want it to contain the keymap's quit key %q", view, help.Key)
+	}
 }
