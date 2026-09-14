@@ -13,6 +13,7 @@ import (
 	"github.com/mo-pankaj/kctl/internal/ui/stack"
 	"github.com/mo-pankaj/kctl/internal/ui/statusbar"
 	"github.com/mo-pankaj/kctl/internal/ui/views/ctxpicker"
+	"github.com/mo-pankaj/kctl/internal/ui/views/logview"
 	"github.com/mo-pankaj/kctl/internal/ui/views/podlist"
 )
 
@@ -92,6 +93,23 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.status.Message = msg.Err.Error()
 		// Fall through so the picker renders its own error state too.
 
+	case podlist.SelectedMsg:
+		container := ""
+		if len(msg.Pod.Containers) > 0 {
+			container = msg.Pod.Containers[0]
+		}
+
+		req := core.LogRequest{
+			Namespace: msg.Pod.Namespace,
+			Pod:       msg.Pod.Name,
+			Container: container,
+			Follow:    true,
+		}
+
+		m.stack.Push(logview.New(m.logger, m.styles, m.keys, m.pods, req))
+
+		return m, m.stack.Top().Init()
+
 	case cmdbar.SubmitMsg:
 		return m.runCommand(msg.Command)
 
@@ -122,6 +140,13 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			}
 
 			if key.Matches(msg, m.keys.Back) {
+				// Close before popping: a log view holds a live stream, and
+				// dropping it without closing leaks a connection per pod visited.
+				closer, ok := m.stack.Top().(interface{ Close() })
+				if ok {
+					closer.Close()
+				}
+
 				popped := m.stack.Pop()
 				if popped {
 					return m, cmd

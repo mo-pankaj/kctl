@@ -13,6 +13,7 @@ type Map struct {
 	Filter    key.Binding
 	SortCycle key.Binding
 	Command   key.Binding
+	Follow    key.Binding
 	Back      key.Binding
 	Select    key.Binding
 }
@@ -43,6 +44,10 @@ func Default() (m Map) {
 		Command: key.NewBinding(
 			key.WithKeys(":"),
 			key.WithHelp(":", "command"),
+		),
+		Follow: key.NewBinding(
+			key.WithKeys("f"),
+			key.WithHelp("f", "follow"),
 		),
 	}
 	return m
