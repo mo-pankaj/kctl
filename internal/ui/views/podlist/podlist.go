@@ -170,6 +170,14 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.table.SetHeight(maxInt(3, msg.Height-6))
 		return m, cmd
 
+	case tea.PasteMsg:
+		if m.filtering {
+			m.filter, cmd = m.filter.Update(msg)
+			(&m).refresh()
+		}
+
+		return m, cmd
+
 	case tea.KeyPressMsg:
 		if m.filtering {
 			switch msg.Code {

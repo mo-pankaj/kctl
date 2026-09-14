@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
@@ -80,6 +81,7 @@ type Model struct {
 	diffs    []core.DiffResult
 	applied  []core.ApplyResult
 	force    bool
+	matches  []string
 	err      error
 	width    int
 }
@@ -89,7 +91,15 @@ func New(logger *zap.Logger, styles theme.Styles, k keys.Map, runner Runner, par
 	path := textinput.New()
 	path.Prompt = "path: "
 	path.CharLimit = 512
-	path.SetValue("")
+
+	// Seed with the working directory so the common case is a few characters
+	// plus Tab rather than an absolute path typed from scratch.
+	cwd, err := os.Getwd()
+	if err == nil {
+		path.SetValue(cwd + string(filepath.Separator))
+	}
+
+	path.CursorEnd()
 	path.Focus()
 
 	confirm := textinput.New()
@@ -219,6 +229,23 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
+
+	case tea.PasteMsg:
+		// Bracketed paste arrives as its own message, not as key presses. The
+		// text inputs handle it, but only if it reaches them.
+		switch m.stage {
+		case stagePath:
+			m.path, cmd = m.path.Update(msg)
+
+			return m, cmd
+
+		case stageConfirm:
+			m.confirm, cmd = m.confirm.Update(msg)
+
+			return m, cmd
+		}
+
+		return m, cmd
 	}
 
 	return m, cmd
@@ -235,6 +262,16 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (model tea.Model, cmd tea.Cmd) {
 
 	switch m.stage {
 	case stagePath:
+		if msg.Code == tea.KeyTab {
+			completed, candidates := Complete(m.path.Value())
+			m.path.SetValue(completed)
+			m.path.CursorEnd()
+			m.matches = candidates
+			m.err = nil
+
+			return m, cmd
+		}
+
 		if msg.Code == tea.KeyEnter {
 			value := strings.TrimSpace(m.path.Value())
 			if value == "" {
@@ -244,6 +281,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (model tea.Model, cmd tea.Cmd) {
 			return m, m.dryRun(value)
 		}
 
+		m.matches = nil
 		m.path, cmd = m.path.Update(msg)
 
 		return m, cmd
@@ -336,8 +374,17 @@ func (m Model) View() (v tea.View) {
 
 	switch m.stage {
 	case stagePath:
-		b.WriteString("\n  " + m.path.View() + "\n\n")
-		b.WriteString(m.styles.Help.Render("  enter:dry-run  "+keys.HelpLine(m.keys.Back)) + "\n")
+		b.WriteString("\n  " + m.path.View() + "\n")
+
+		if len(m.matches) > 1 {
+			b.WriteString("\n" + m.styles.Dimmed.Render("  "+strings.Join(trimTo(m.matches, 10), "   ")) + "\n")
+
+			if len(m.matches) > 10 {
+				b.WriteString(m.styles.Dimmed.Render(fmt.Sprintf("  … and %d more", len(m.matches)-10)) + "\n")
+			}
+		}
+
+		b.WriteString("\n" + m.styles.Help.Render("  tab:complete  enter:dry-run  "+keys.HelpLine(m.keys.Back)) + "\n")
 
 	case stageDiff:
 		b.WriteString(m.viewport.View() + "\n")
@@ -490,6 +537,16 @@ func (m Model) diffBody() (s string) {
 	s = b.String()
 
 	return s
+}
+
+// trimTo caps a candidate list for display.
+func trimTo(list []string, n int) (out []string) {
+	out = list
+	if len(out) > n {
+		out = out[:n]
+	}
+
+	return out
 }
 
 func namespaceLabel(ns string) (s string) {

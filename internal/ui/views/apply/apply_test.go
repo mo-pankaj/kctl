@@ -67,6 +67,10 @@ func newModel(t *testing.T, r *runner, target apply.Target) (tea.Model, string) 
 func typePath(t *testing.T, model tea.Model, path string) tea.Model {
 	t.Helper()
 
+	// The field is pre-seeded with the working directory, so clear it first
+	// (ctrl+u is textinput's DeleteBeforeCursor).
+	model, _ = model.Update(tea.KeyPressMsg{Code: 'u', Mod: tea.ModCtrl})
+
 	for _, r := range path {
 		model, _ = model.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
