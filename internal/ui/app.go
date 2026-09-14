@@ -232,6 +232,11 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.status.Message = msg.Err.Error()
 		// Fall through so the picker renders its own error state too.
 
+	case apply.CancelMsg:
+		m.stack.Pop()
+
+		return m, cmd
+
 	case podlist.DescribeMsg:
 		// The pod source implements PodDescriber too; a source that does not
 		// (a narrower test double) simply has no describe view.
@@ -267,6 +272,12 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m.runCommand(msg.Command)
 
 	case tea.KeyPressMsg:
+		// Checked before anything else, including focused inputs: there must
+		// always be a way out.
+		if key.Matches(msg, m.keys.ForceQuit) {
+			return m, tea.Quit
+		}
+
 		if m.cmdBar.Focused() {
 			m.cmdBar, cmd = m.cmdBar.Update(msg)
 

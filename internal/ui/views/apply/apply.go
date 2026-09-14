@@ -53,6 +53,13 @@ type appliedMsg struct {
 	results []core.ApplyResult
 }
 
+// CancelMsg asks the root to dismiss this view.
+//
+// The view cannot pop itself, and its text inputs consume esc before the root
+// ever sees it — so esc has to be turned into a message rather than left to the
+// global back binding.
+type CancelMsg struct{}
+
 // ErrorMsg reports a failure.
 type ErrorMsg struct{ Err error }
 
@@ -218,6 +225,14 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 }
 
 func (m Model) handleKey(msg tea.KeyPressMsg) (model tea.Model, cmd tea.Cmd) {
+	// esc always leaves, at every stage. The path and confirm inputs would
+	// otherwise swallow it and strand the user in this view.
+	if msg.Code == tea.KeyEscape {
+		cmd = func() tea.Msg { return CancelMsg{} }
+
+		return m, cmd
+	}
+
 	switch m.stage {
 	case stagePath:
 		if msg.Code == tea.KeyEnter {

@@ -165,3 +165,23 @@ func TestPushedViewsReceiveTheCurrentSize(t *testing.T) {
 		t.Fatalf("pushed view rendered no content — it was never given the window size\n%s", body)
 	}
 }
+
+func TestCtrlCQuitsEvenWhileTyping(t *testing.T) {
+	var m tea.Model = rootWithMocks(t)
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	// Open the command bar so an input owns the keyboard.
+	m, _ = m.Update(tea.KeyPressMsg{Code: ':', Text: ":"})
+	m = typeInto(t, m, "ns kube")
+
+	// ctrl+c must still quit. Suppressing it along with the other global
+	// bindings left no way out of a focused input at all.
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+	if cmd == nil {
+		t.Fatal("ctrl+c produced no command while an input was focused")
+	}
+
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatalf("ctrl+c produced %T, want tea.QuitMsg", cmd())
+	}
+}

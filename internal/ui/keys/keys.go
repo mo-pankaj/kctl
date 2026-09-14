@@ -10,6 +10,7 @@ import (
 // Map is the complete set of kctl key bindings.
 type Map struct {
 	Quit      key.Binding
+	ForceQuit key.Binding
 	Filter    key.Binding
 	SortCycle key.Binding
 	Command   key.Binding
@@ -25,8 +26,15 @@ type Map struct {
 func Default() (m Map) {
 	m = Map{
 		Quit: key.NewBinding(
-			key.WithKeys("q", "ctrl+c"),
+			key.WithKeys("q"),
 			key.WithHelp("q", "quit"),
+		),
+		// ForceQuit is deliberately separate from Quit: it must work even while
+		// a text input has focus. Suppressing it along with the other global
+		// bindings left no way out of a view that owned the keyboard.
+		ForceQuit: key.NewBinding(
+			key.WithKeys("ctrl+c"),
+			key.WithHelp("ctrl+c", "quit"),
 		),
 		Back: key.NewBinding(
 			key.WithKeys("esc"),

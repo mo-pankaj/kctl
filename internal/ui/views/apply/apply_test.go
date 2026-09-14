@@ -220,3 +220,53 @@ func TestDryRunErrorBlocksApply(t *testing.T) {
 		t.Fatal("applied despite a document failing its dry run")
 	}
 }
+
+func TestEscapeLeavesTheApplyViewFromEveryStage(t *testing.T) {
+	r := &runner{diffs: []core.DiffResult{{
+		Manifest: core.Manifest{Kind: "ConfigMap", Name: "cfg"}, Added: 1,
+	}}}
+
+	// Stage 1: the path input would otherwise swallow esc entirely, leaving the
+	// user stranded with no way back and no way to quit.
+	model, path := newModel(t, r, apply.Target{Context: "kind-dev"})
+
+	for _, ch := range "some/typed/path" {
+		model, _ = press(model, ch)
+	}
+
+	_, cmd := model.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if cmd == nil {
+		t.Fatal("esc at the path stage produced no command")
+	}
+
+	if _, ok := cmd().(apply.CancelMsg); !ok {
+		t.Fatalf("esc produced %T, want apply.CancelMsg", cmd())
+	}
+
+	// Stage 2: the diff.
+	model, path = newModel(t, r, apply.Target{Context: "kind-dev"})
+	model = typePath(t, model, path)
+
+	_, cmd = model.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if cmd == nil {
+		t.Fatal("esc at the diff stage produced no command")
+	}
+
+	if _, ok := cmd().(apply.CancelMsg); !ok {
+		t.Fatalf("esc at diff produced %T, want apply.CancelMsg", cmd())
+	}
+
+	// Stage 3: the protected-cluster confirm input.
+	model, path = newModel(t, r, apply.Target{Context: "cnc-prod", Protected: true})
+	model = typePath(t, model, path)
+	model, _ = press(model, 'y')
+
+	_, cmd = model.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if cmd == nil {
+		t.Fatal("esc at the protected confirm stage produced no command")
+	}
+
+	if _, ok := cmd().(apply.CancelMsg); !ok {
+		t.Fatalf("esc at confirm produced %T, want apply.CancelMsg", cmd())
+	}
+}
