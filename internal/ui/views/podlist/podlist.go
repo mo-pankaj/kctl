@@ -189,6 +189,14 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			return m, cmd
 		}
 
+		// Guarded on m.err: without it, r would fire a redundant read on every
+		// press during normal browsing.
+		if key.Matches(msg, m.keys.Retry) && m.err != nil {
+			m.err = nil
+
+			return m, m.load()
+		}
+
 		if key.Matches(msg, m.keys.Filter) {
 			m.filtering = true
 			m.filter.Focus()
@@ -232,7 +240,7 @@ func (m Model) View() (v tea.View) {
 	var s string
 	if m.err != nil {
 		s = "\n" + m.styles.StatusError.Render("  "+m.err.Error()) + "\n\n" +
-			m.styles.Help.Render("  "+keys.HelpLine(m.keys.Back)) + "\n"
+			m.styles.Help.Render("  "+keys.HelpLine(m.keys.Retry, m.keys.Back)) + "\n"
 		v = tea.NewView(s)
 		return v
 	}

@@ -139,6 +139,20 @@ func (s *PodSource) close() {
 	s.subs = nil
 }
 
+// Healthy reports whether the informer is started and its subscription is live.
+//
+// client-go reconnects and resyncs a dropped watch on its own, so this is not a
+// reconnect mechanism — it is the signal the status bar renders so a stalled
+// cluster connection is visible rather than looking like an empty namespace.
+func (s *PodSource) Healthy() (healthy bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	healthy = s.started && !s.closed
+
+	return healthy
+}
+
 // Subscribe returns a coalescing notification channel. The channel carries no
 // data: receive from it, then re-read via Pods.
 func (s *PodSource) Subscribe(ctx context.Context, sel core.Selector) (dirty <-chan struct{}, err error) {

@@ -1,6 +1,7 @@
 package podlist
 
 import (
+	"errors"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -106,5 +107,38 @@ func TestEscapeClearsTheFilterAndRestoresEveryRow(t *testing.T) {
 
 	if len(after.visible) != 3 {
 		t.Fatalf("visible = %d after esc, want all 3 rows restored", len(after.visible))
+	}
+}
+
+func TestRetryClearsTheErrorAndReloads(t *testing.T) {
+	m := New(zap.NewNop(), theme.New(), keys.Default(), nil, core.Selector{Namespace: "ns1"})
+	m.err = errors.New("error-listing-pods :forbidden")
+
+	// r must clear the error and issue a fresh read.
+	updated, cmd := m.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
+
+	after, ok := updated.(Model)
+	if !ok {
+		t.Fatalf("Update returned %T, want Model", updated)
+	}
+
+	if after.err != nil {
+		t.Fatalf("err = %v after retry, want it cleared", after.err)
+	}
+
+	if cmd == nil {
+		t.Fatal("retry produced no reload command")
+	}
+}
+
+func TestRetryIsInertWithoutAnError(t *testing.T) {
+	m := loaded(t, []core.Pod{{Namespace: "ns1", Name: "api-1"}}, 0)
+
+	// Without the m.err guard this would fire a redundant cache read on every
+	// press during normal browsing.
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
+
+	if cmd != nil {
+		t.Fatal("retry issued a reload with no error present; it must be inert")
 	}
 }

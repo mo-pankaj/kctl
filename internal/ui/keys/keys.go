@@ -14,6 +14,7 @@ type Map struct {
 	SortCycle key.Binding
 	Command   key.Binding
 	Follow    key.Binding
+	Retry     key.Binding
 	Back      key.Binding
 	Select    key.Binding
 }
@@ -48,6 +49,10 @@ func Default() (m Map) {
 		Follow: key.NewBinding(
 			key.WithKeys("f"),
 			key.WithHelp("f", "follow"),
+		),
+		Retry: key.NewBinding(
+			key.WithKeys("r"),
+			key.WithHelp("r", "retry"),
 		),
 	}
 	return m

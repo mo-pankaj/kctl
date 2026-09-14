@@ -3,6 +3,7 @@ package ui
 
 import (
 	"context"
+	"time"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -24,6 +25,23 @@ import (
 // typing "q" into a filter would quit the program.
 type inputFocuser interface {
 	InputFocused() bool
+}
+
+// healthReporter is implemented by data sources that can report connectivity.
+type healthReporter interface {
+	Healthy() bool
+}
+
+// healthTickMsg drives the periodic connectivity check.
+type healthTickMsg struct{}
+
+// healthTick schedules the next connectivity check.
+func healthTick() (cmd tea.Cmd) {
+	cmd = tea.Tick(2*time.Second, func(time.Time) tea.Msg {
+		return healthTickMsg{}
+	})
+
+	return cmd
 }
 
 // Model is the kctl root model.
@@ -81,8 +99,12 @@ func (m Model) WithSession(session *Session) (out Model) {
 func (m Model) Init() (cmd tea.Cmd) {
 	top := m.stack.Top()
 	if top != nil {
-		cmd = top.Init()
+		cmd = tea.Batch(top.Init(), healthTick())
+
+		return cmd
 	}
+
+	cmd = healthTick()
 
 	return cmd
 }
@@ -112,6 +134,20 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.stack.Pop()
 
 		return m, m.switchTo(msg.Context.Name, msg.Context.Namespace)
+
+	case healthTickMsg:
+		reporter, ok := m.pods.(healthReporter)
+		switch {
+		case ok && !reporter.Healthy():
+			m.status.Connecting = true
+
+		case !m.switching:
+			// Only clear it when no switch is in flight, so the two do not
+			// fight over the same indicator.
+			m.status.Connecting = false
+		}
+
+		return m, healthTick()
 
 	case switchedMsg:
 		m.status.Connecting = false

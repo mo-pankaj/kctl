@@ -160,3 +160,44 @@ func TestAllNamespacesScopeSeesEveryNamespace(t *testing.T) {
 		t.Fatalf("namespace-narrowed read = %+v, want just pod b", scoped)
 	}
 }
+
+func TestHealthyIsTrueAfterCacheSync(t *testing.T) {
+	source, _, _ := startSource(t, "ns1")
+
+	if !source.Healthy() {
+		t.Fatal("Healthy() = false immediately after a successful Start")
+	}
+}
+
+func TestHealthyIsFalseBeforeStart(t *testing.T) {
+	source := kube.NewPodSource(zap.NewNop(), fake.NewClientset(), "ns1")
+
+	if source.Healthy() {
+		t.Fatal("Healthy() = true before Start; an unstarted source is not connected")
+	}
+}
+
+func TestHealthyGoesFalseWhenTheSourceIsCancelled(t *testing.T) {
+	source := kube.NewPodSource(zap.NewNop(), fake.NewClientset(), "ns1")
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	err := source.Start(ctx)
+	if err != nil {
+		t.Fatalf("Start returned error: %v", err)
+	}
+
+	cancel()
+
+	// close() runs on a goroutine watching ctx.Done, so poll briefly.
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if !source.Healthy() {
+			return
+		}
+
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	t.Fatal("Healthy() stayed true after the source's context was cancelled")
+}
