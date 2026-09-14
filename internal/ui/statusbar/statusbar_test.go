@@ -66,3 +66,43 @@ func TestViewShowsMessage(t *testing.T) {
 		t.Fatalf("View() missing message, got: %q", got)
 	}
 }
+
+func TestLongMessageIsTruncatedToOneLine(t *testing.T) {
+	m := newBar()
+	m.Width = 80
+	m.Context = "kind-dev"
+	m.Namespace = "default"
+	m.Message = strings.Repeat("error-building-sources :error-starting-pod-source ", 6)
+
+	got := m.View()
+
+	// A wrapped status bar pushes the view under it off screen, which reads as
+	// the list emptying rather than a message appearing.
+	for _, line := range strings.Split(got, "\n") {
+		if len([]rune(stripANSI(line))) > m.Width+1 {
+			t.Fatalf("status bar line is %d columns wide, want <= %d:\n%q", len([]rune(stripANSI(line))), m.Width, line)
+		}
+	}
+
+	if !strings.Contains(got, "…") {
+		t.Fatalf("a too-long message should be elided; got %q", got)
+	}
+}
+
+func stripANSI(s string) string {
+	var b strings.Builder
+
+	inEscape := false
+	for _, r := range s {
+		switch {
+		case r == 0x1b:
+			inEscape = true
+		case inEscape && (r == 'm' || r == 'K'):
+			inEscape = false
+		case !inEscape:
+			b.WriteRune(r)
+		}
+	}
+
+	return b.String()
+}

@@ -40,6 +40,18 @@ func run() (code int) {
 	}
 	defer func() { _ = logger.Sync() }()
 
+	// Move fd 2 to the log file for the lifetime of the UI. kubeconfig exec
+	// credential plugins are subprocesses that write their failures to stderr,
+	// and klog does the same from in-process; either one prints over the
+	// rendered screen and leaves it unreadable.
+	restoreStderr, err := logging.RedirectStderr(logPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "kctl: %v\n", err)
+
+		return 1
+	}
+	defer restoreStderr()
+
 	store, err := kube.NewContextStore(logger, "")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "kctl: %v\n", err)
