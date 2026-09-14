@@ -55,6 +55,7 @@ type Model struct {
 	lines    <-chan string
 	closer   io.Closer
 	follow   bool
+	pending  int
 	err      error
 	ready    bool
 }
@@ -167,10 +168,17 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			m.ring.Add(line)
 		}
 
-		m.viewport.SetContent(strings.Join(m.ring.Lines(), "\n"))
-		if m.follow {
-			m.viewport.GotoBottom()
+		// While paused the screen must not move at all. Re-rendering would
+		// slide the visible window as the ring grows and starts dropping its
+		// oldest lines, which is exactly what "paused" promises not to do.
+		if !m.follow {
+			m.pending += len(msg.lines)
+
+			return m, awaitLines(m.lines)
 		}
+
+		m.viewport.SetContent(strings.Join(m.ring.Lines(), "\n"))
+		m.viewport.GotoBottom()
 
 		return m, awaitLines(m.lines)
 
@@ -190,8 +198,12 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case tea.KeyPressMsg:
 		if key.Matches(msg, m.keys.Follow) {
 			m.follow = !m.follow
+
 			if m.follow {
+				// Catch up on everything buffered while paused.
+				m.viewport.SetContent(strings.Join(m.ring.Lines(), "\n"))
 				m.viewport.GotoBottom()
+				m.pending = 0
 			}
 
 			return m, cmd
@@ -212,9 +224,15 @@ func (m Model) View() (v tea.View) {
 		return v
 	}
 
-	mode := "follow"
+	mode := m.styles.StatusValue.Render("follow")
 	if !m.follow {
-		mode = "paused"
+		mode = m.styles.StatusWarn.Render("paused")
+
+		if m.pending > 0 {
+			// Say how far behind the screen is, so a frozen view is obviously
+			// frozen rather than looking like a dead stream.
+			mode += m.styles.Dimmed.Render(fmt.Sprintf(" (+%d buffered)", m.pending))
+		}
 	}
 
 	header := fmt.Sprintf("  logs %s/%s [%s]  ·  %s  ·  %d lines",
