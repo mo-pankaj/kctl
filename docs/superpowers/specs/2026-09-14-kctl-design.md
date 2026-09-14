@@ -307,9 +307,9 @@ not the context nickname:
 ```yaml
 # ~/.config/kctl/config.yaml
 risk:
-  - server: "https://api.zulu.*"
+  - server: "https://prod-apiserver-*.elb.amazonaws.com"
     level: protected
-  - server: "https://api.alpha.*"
+  - server: "https://10.0.4.7:6443"
     level: protected
 ```
 

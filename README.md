@@ -89,9 +89,10 @@ frequently not called anything resembling "prod".
 ```yaml
 # ~/.config/kctl/config.yaml
 risk:
-  - server: "https://zulu-apiserver-*"
+  # Match the API server URL, exactly or with a trailing wildcard.
+  - server: "https://prod-apiserver-*.elb.amazonaws.com"
     level: protected
-  - server: "https://apiserver-alpha-*"
+  - server: "https://10.0.4.7:6443"
     level: protected
 ```
 
