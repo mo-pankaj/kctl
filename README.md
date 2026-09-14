@@ -37,6 +37,8 @@ context's namespace. It reads `KUBECONFIG` if set, otherwise `~/.kube/config`.
 | `/` | Filter the list by name; `esc` clears it |
 | `s` | Cycle the sort order: name → status → restarts → age |
 | `enter` | Tail the selected pod's logs |
+| `d` | Describe the selected pod, with its events |
+| `a` | Apply a manifest, after showing the diff |
 | `f` | In the log view: pause or resume following |
 | `r` | Retry after a failed read |
 | `c` | Open the context picker |
@@ -54,6 +56,48 @@ quit mid-word.
 | `:ns <name>` | Scope the pod list to one namespace |
 | `:ns all` | Show every namespace, adding a NAMESPACE column |
 | `:ctx` | Open the context picker |
+
+## Describe
+
+`d` shows why a pod is unhappy: per-container state with the reason and exit code
+behind it, conditions, and the pod's events newest first with warnings highlighted.
+
+Events are fetched live rather than watched — the reason a pod will not start is
+exactly the thing that must not be served stale. If your RBAC grants pods but denies
+events, the detail still renders and the events section is simply empty.
+
+## Apply
+
+`a` asks for a manifest path, then shows what the **server** says would change: a
+real server-side apply with `DryRun=All`, so the diff reflects defaulting, validation
+and admission rather than a client-side guess. Nothing is written until you confirm.
+
+Three things block the write:
+
+- **A field-ownership conflict.** The dry run reports which manager owns which
+  fields, so you see `conflict with flux over .data.tier` before deciding rather
+  than after a half-applied set. Forcing is a separate armed toggle (`F`).
+- **A document that failed its dry run.**
+- **A protected cluster**, until you type the context name exactly.
+
+### Protected clusters
+
+Risk is keyed on the cluster's **API server URL**, never the context name. Context
+names are local nicknames that get renamed, and a production cluster's context is
+frequently not called anything resembling "prod".
+
+```yaml
+# ~/.config/kctl/config.yaml
+risk:
+  - server: "https://zulu-apiserver-*"
+    level: protected
+  - server: "https://apiserver-alpha-*"
+    level: protected
+```
+
+A cluster matching no rule is normal. Failing open is deliberate: the alternative
+trains you to type a context name for every unremarkable apply, which is how a
+confirmation becomes muscle memory and stops being read.
 
 ## What it does
 
@@ -80,21 +124,14 @@ connections open.
 
 ## Not built yet
 
-These are specified but unimplemented:
+- Secrets browsing, with values redacted until explicitly revealed. The design is
+  deliberate about this: secrets are never cached, so secret material does not sit
+  in a long-lived process.
 
-- `describe` for a pod, including its events — the thing you want when a pod will
-  not start
-- Secrets browsing, with values redacted until explicitly revealed
-- The apply proxy: a server-side dry-run diff and a typed confirmation on protected
-  clusters before anything is written
-
-The design for all three is in
+The design is in
 [`docs/superpowers/specs/2026-09-14-kctl-design.md`](docs/superpowers/specs/2026-09-14-kctl-design.md).
 
-Also absent: an in-app help overlay, and a config file. Protected-cluster rules for
-the apply proxy are designed to key on the cluster's **server URL** rather than the
-context name, because context names get renamed and frequently do not contain the
-word "prod".
+Also absent: an in-app help overlay, and a file picker for apply (paths are typed).
 
 ## Logs
 
@@ -114,7 +151,7 @@ cmd/kctl           entry point, logger, panic guard
 internal/core      domain types and role interfaces — imports only the stdlib
 internal/kube      client-go: kubeconfig, informers, log streams
 internal/ui        Bubble Tea root model, view stack, status bar, command bar
-internal/ui/views  podlist, logview, ctxpicker
+internal/ui/views  podlist, logview, describe, apply, ctxpicker
 ```
 
 `internal/core` is the seam. It imports no Kubernetes, Bubble Tea or logging
@@ -128,5 +165,5 @@ it.
 go test ./... -race
 ```
 
-113 tests across 14 packages. The cluster-facing code is tested against client-go's
+143 tests across 16 packages. The cluster-facing code is tested against client-go's
 fake clientset, and the views through `teatest`, so the suite needs no cluster.
