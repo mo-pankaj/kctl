@@ -15,6 +15,7 @@ type Map struct {
 	Command   key.Binding
 	Follow    key.Binding
 	Retry     key.Binding
+	Describe  key.Binding
 	Back      key.Binding
 	Select    key.Binding
 }
@@ -53,6 +54,10 @@ func Default() (m Map) {
 		Retry: key.NewBinding(
 			key.WithKeys("r"),
 			key.WithHelp("r", "retry"),
+		),
+		Describe: key.NewBinding(
+			key.WithKeys("d"),
+			key.WithHelp("d", "describe"),
 		),
 	}
 	return m

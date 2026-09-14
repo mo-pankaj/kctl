@@ -74,3 +74,61 @@ type LogRequest struct {
 	Follow    bool
 	TailLines int64
 }
+
+// ContainerState describes one container's current state, flattened to the
+// fields that matter when diagnosing a pod that will not start.
+type ContainerState struct {
+	Name         string
+	Image        string
+	Ready        bool
+	RestartCount int32
+	State        string
+	Reason       string
+	Message      string
+	ExitCode     *int32
+	Started      time.Time
+}
+
+// PodCondition is one entry of a pod's condition list.
+type PodCondition struct {
+	Type           string
+	Status         string
+	Reason         string
+	Message        string
+	LastTransition time.Time
+}
+
+// Event is a Kubernetes event concerning one object.
+type Event struct {
+	Type    string
+	Reason  string
+	Message string
+	Count   int32
+	First   time.Time
+	Last    time.Time
+}
+
+// Warning reports whether the event is a warning rather than routine noise.
+func (e Event) Warning() (warn bool) {
+	warn = e.Type == "Warning"
+	return warn
+}
+
+// PodDetail is everything the describe view renders. It is deliberately
+// separate from Pod: the list needs six fields per row, and carrying this much
+// per row would be wasteful.
+type PodDetail struct {
+	Pod
+
+	QOSClass       string
+	OwnerKind      string
+	OwnerName      string
+	ServiceAccount string
+	PodIP          string
+	HostIP         string
+	Labels         map[string]string
+	Conditions     []PodCondition
+	Containers     []ContainerState
+	InitContainers []ContainerState
+	Volumes        []string
+}

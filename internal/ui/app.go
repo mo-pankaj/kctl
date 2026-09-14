@@ -16,6 +16,7 @@ import (
 	"github.com/mo-pankaj/kctl/internal/ui/stack"
 	"github.com/mo-pankaj/kctl/internal/ui/statusbar"
 	"github.com/mo-pankaj/kctl/internal/ui/views/ctxpicker"
+	"github.com/mo-pankaj/kctl/internal/ui/views/describe"
 	"github.com/mo-pankaj/kctl/internal/ui/views/logview"
 	"github.com/mo-pankaj/kctl/internal/ui/views/podlist"
 )
@@ -177,6 +178,20 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case ctxpicker.ErrorMsg:
 		m.status.Message = msg.Err.Error()
 		// Fall through so the picker renders its own error state too.
+
+	case podlist.DescribeMsg:
+		// The pod source implements PodDescriber too; a source that does not
+		// (a narrower test double) simply has no describe view.
+		describer, ok := m.pods.(core.PodDescriber)
+		if !ok {
+			m.status.Message = "describe unavailable for this source"
+
+			return m, cmd
+		}
+
+		m.stack.Push(describe.New(m.logger, m.styles, m.keys, describer, msg.Pod.Namespace, msg.Pod.Name))
+
+		return m, m.stack.Top().Init()
 
 	case podlist.SelectedMsg:
 		container := ""

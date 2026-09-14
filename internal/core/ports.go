@@ -36,3 +36,11 @@ type PodReader interface {
 	// Logs opens a log stream. The caller must Close the reader.
 	Logs(ctx context.Context, req LogRequest) (io.ReadCloser, error)
 }
+
+// PodDescriber returns the detail and events behind a single pod. Events are
+// fetched on demand rather than watched: they are only ever read while a
+// describe view is open, and a stale event list is worse than a live call.
+type PodDescriber interface {
+	Describe(ctx context.Context, ns, name string) (*PodDetail, error)
+	Events(ctx context.Context, ns, name string) ([]Event, error)
+}

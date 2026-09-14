@@ -22,6 +22,11 @@ type SelectedMsg struct {
 	Pod core.Pod
 }
 
+// DescribeMsg reports that the user asked to describe a pod.
+type DescribeMsg struct {
+	Pod core.Pod
+}
+
 // ErrorMsg reports a read failure.
 type ErrorMsg struct {
 	Err error
@@ -211,6 +216,10 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			return m, cmd
 		}
 
+		if key.Matches(msg, m.keys.Describe) {
+			return m, m.emitDescribe()
+		}
+
 		if key.Matches(msg, m.keys.Select) {
 			return m, m.emitSelected()
 		}
@@ -235,6 +244,22 @@ func (m Model) emitSelected() (cmd tea.Cmd) {
 	return cmd
 }
 
+// emitDescribe reports that the highlighted pod should be described.
+func (m Model) emitDescribe() (cmd tea.Cmd) {
+	index := m.table.Cursor()
+	if index < 0 || index >= len(m.visible) {
+		return cmd
+	}
+
+	pod := m.visible[index]
+
+	cmd = func() tea.Msg {
+		return DescribeMsg{Pod: pod}
+	}
+
+	return cmd
+}
+
 // View satisfies tea.Model.
 func (m Model) View() (v tea.View) {
 	var s string
@@ -253,7 +278,7 @@ func (m Model) View() (v tea.View) {
 	s = "\n" + header + m.table.View() + "\n" +
 		m.styles.Help.Render(fmt.Sprintf("  %d/%d pods  ·  sort:%s  ·  %s",
 			len(m.visible), len(m.pods), m.sortKey,
-			keys.HelpLine(m.keys.Filter, m.keys.SortCycle, m.keys.Select, m.keys.Back))) + "\n"
+			keys.HelpLine(m.keys.Filter, m.keys.SortCycle, m.keys.Select, m.keys.Describe, m.keys.Back))) + "\n"
 
 	v = tea.NewView(s)
 	return v

@@ -206,3 +206,57 @@ func (mr *MockPodReaderMockRecorder) Subscribe(ctx, sel any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Subscribe", reflect.TypeOf((*MockPodReader)(nil).Subscribe), ctx, sel)
 }
+
+// MockPodDescriber is a mock of PodDescriber interface.
+type MockPodDescriber struct {
+	ctrl     *gomock.Controller
+	recorder *MockPodDescriberMockRecorder
+	isgomock struct{}
+}
+
+// MockPodDescriberMockRecorder is the mock recorder for MockPodDescriber.
+type MockPodDescriberMockRecorder struct {
+	mock *MockPodDescriber
+}
+
+// NewMockPodDescriber creates a new mock instance.
+func NewMockPodDescriber(ctrl *gomock.Controller) *MockPodDescriber {
+	mock := &MockPodDescriber{ctrl: ctrl}
+	mock.recorder = &MockPodDescriberMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockPodDescriber) EXPECT() *MockPodDescriberMockRecorder {
+	return m.recorder
+}
+
+// Describe mocks base method.
+func (m *MockPodDescriber) Describe(ctx context.Context, ns, name string) (*core.PodDetail, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Describe", ctx, ns, name)
+	ret0, _ := ret[0].(*core.PodDetail)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Describe indicates an expected call of Describe.
+func (mr *MockPodDescriberMockRecorder) Describe(ctx, ns, name any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Describe", reflect.TypeOf((*MockPodDescriber)(nil).Describe), ctx, ns, name)
+}
+
+// Events mocks base method.
+func (m *MockPodDescriber) Events(ctx context.Context, ns, name string) ([]core.Event, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Events", ctx, ns, name)
+	ret0, _ := ret[0].([]core.Event)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Events indicates an expected call of Events.
+func (mr *MockPodDescriberMockRecorder) Events(ctx, ns, name any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Events", reflect.TypeOf((*MockPodDescriber)(nil).Events), ctx, ns, name)
+}
