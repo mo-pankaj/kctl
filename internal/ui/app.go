@@ -12,6 +12,7 @@ import (
 	"github.com/mo-pankaj/kctl/internal/ui/stack"
 	"github.com/mo-pankaj/kctl/internal/ui/statusbar"
 	"github.com/mo-pankaj/kctl/internal/ui/views/ctxpicker"
+	"github.com/mo-pankaj/kctl/internal/ui/views/podlist"
 )
 
 // Model is the kctl root model.
@@ -20,6 +21,8 @@ type Model struct {
 	keys     keys.Map
 	styles   theme.Styles
 	contexts core.ContextManager
+	pods     core.PodReader
+	sel      core.Selector
 	status   statusbar.Model
 	stack    stack.Stack
 	width    int
@@ -27,7 +30,7 @@ type Model struct {
 }
 
 // New builds the root model.
-func New(logger *zap.Logger, contexts core.ContextManager) (m Model) {
+func New(logger *zap.Logger, contexts core.ContextManager, pods core.PodReader, sel core.Selector) (m Model) {
 	styles := theme.New()
 
 	m = Model{
@@ -35,6 +38,8 @@ func New(logger *zap.Logger, contexts core.ContextManager) (m Model) {
 		keys:     keys.Default(),
 		styles:   styles,
 		contexts: contexts,
+		pods:     pods,
+		sel:      sel,
 		status:   statusbar.New(styles),
 	}
 
@@ -42,7 +47,7 @@ func New(logger *zap.Logger, contexts core.ContextManager) (m Model) {
 	m.status.Context = current.Name
 	m.status.Namespace = current.Namespace
 
-	m.stack.Push(ctxpicker.New(m.logger, styles, m.keys, contexts))
+	m.stack.Push(podlist.New(m.logger, styles, m.keys, pods, sel))
 
 	return m
 }
@@ -80,6 +85,11 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case tea.KeyPressMsg:
 		if key.Matches(msg, m.keys.Quit) {
 			return m, tea.Quit
+		}
+
+		if msg.String() == "c" {
+			m.stack.Push(ctxpicker.New(m.logger, m.styles, m.keys, m.contexts))
+			return m, m.stack.Top().Init()
 		}
 
 		if key.Matches(msg, m.keys.Back) {

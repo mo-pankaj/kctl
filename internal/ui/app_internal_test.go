@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -29,7 +30,16 @@ func TestViewRendersHelpFromKeymap(t *testing.T) {
 		Return([]core.ContextInfo{{Name: "dev-01", Cluster: "charlie", Namespace: "trading-service", Current: true}}).
 		AnyTimes()
 
-	m := New(zap.NewNop(), contexts)
+	pods := mocks.NewMockPodReader(ctrl)
+	pods.EXPECT().Pods(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+	pods.EXPECT().
+		Subscribe(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(context.Context, core.Selector) (<-chan struct{}, error) {
+			return make(chan struct{}), nil
+		}).
+		AnyTimes()
+
+	m := New(zap.NewNop(), contexts, pods, core.Selector{Namespace: "trading-service"})
 	m.keys.Quit = key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "exit"))
 
 	view := m.View().Content

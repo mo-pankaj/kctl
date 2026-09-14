@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"runtime/debug"
@@ -9,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"go.uber.org/zap"
 
+	"github.com/mo-pankaj/kctl/internal/core"
 	"github.com/mo-pankaj/kctl/internal/kube"
 	"github.com/mo-pankaj/kctl/internal/logging"
 	"github.com/mo-pankaj/kctl/internal/ui"
@@ -44,7 +46,34 @@ func run() (code int) {
 		return 1
 	}
 
-	program := tea.NewProgram(ui.New(logger, store))
+	current := store.Current()
+
+	restCfg, err := store.RESTConfig(current.Name)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "kctl: %v\n", err)
+		return 1
+	}
+
+	client, err := kube.NewClientset(restCfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "kctl: %v\n", err)
+		return 1
+	}
+
+	source := kube.NewPodSource(logger, client, current.Namespace)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err = source.Start(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "kctl: cannot reach cluster %s: %v\n", current.Server, err)
+		return 1
+	}
+
+	sel := core.Selector{Namespace: current.Namespace}
+
+	program := tea.NewProgram(ui.New(logger, store, source, sel))
 
 	_, err = program.Run()
 	if err != nil {

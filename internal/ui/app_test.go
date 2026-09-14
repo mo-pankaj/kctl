@@ -2,6 +2,7 @@ package ui_test
 
 import (
 	"bytes"
+	"context"
 	"testing"
 	"time"
 
@@ -29,7 +30,16 @@ func newApp(t *testing.T) ui.Model {
 		Return([]core.ContextInfo{{Name: "dev-01", Cluster: "charlie", Namespace: "trading-service", Current: true}}).
 		AnyTimes()
 
-	return ui.New(zap.NewNop(), contexts)
+	pods := mocks.NewMockPodReader(ctrl)
+	pods.EXPECT().Pods(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+	pods.EXPECT().
+		Subscribe(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(context.Context, core.Selector) (<-chan struct{}, error) {
+			return make(chan struct{}), nil
+		}).
+		AnyTimes()
+
+	return ui.New(zap.NewNop(), contexts, pods, core.Selector{Namespace: "trading-service"})
 }
 
 func TestAppStatusBarShowsCurrentContext(t *testing.T) {
