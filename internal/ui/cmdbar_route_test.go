@@ -115,3 +115,30 @@ func TestUnknownCommandShowsAnErrorAndDoesNotCrash(t *testing.T) {
 
 	_ = cmdbar.VerbNamespace
 }
+
+func TestStatusBarFollowsTheSelectorNotTheContextDefault(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	contexts := mocks.NewMockContextManager(ctrl)
+	contexts.EXPECT().Current().
+		Return(core.ContextInfo{Name: "kind-dev", Namespace: "default", Current: true}).AnyTimes()
+	contexts.EXPECT().Contexts().Return(nil).AnyTimes()
+
+	pods := mocks.NewMockPodReader(ctrl)
+	pods.EXPECT().Pods(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+	pods.EXPECT().Subscribe(gomock.Any(), gomock.Any()).
+		Return((<-chan struct{})(make(chan struct{})), nil).AnyTimes()
+
+	// An all-namespaces selector, while the context still defaults to "default".
+	m := New(zap.NewNop(), contexts, pods, core.Selector{})
+
+	view := m.View().Content
+
+	if !strings.Contains(view, "all namespaces") {
+		t.Fatalf("status bar should read 'all namespaces' for an empty selector; view = %q", view)
+	}
+
+	if strings.Contains(view, "ns default") {
+		t.Fatal("status bar reported the context's default namespace instead of the selector in use")
+	}
+}

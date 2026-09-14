@@ -78,7 +78,11 @@ func New(logger *zap.Logger, contexts core.ContextManager, pods core.PodReader, 
 
 	current := contexts.Current()
 	m.status.Context = current.Name
-	m.status.Namespace = current.Namespace
+
+	// The status bar must describe the SELECTOR the list is actually using, not
+	// the context's default namespace. Reading it from the context made an
+	// all-namespaces list ("" selector) still claim it was scoped to "default".
+	m.status.Namespace = sel.Namespace
 
 	m.stack.Push(podlist.New(m.logger, styles, m.keys, pods, sel))
 
