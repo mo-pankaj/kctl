@@ -1,0 +1,4 @@
+/kctl
+/dist/
+*.test
+*.out
