@@ -19,7 +19,12 @@ func TestCoreHasNoForbiddenImports(t *testing.T) {
 		t.Fatalf("error importing core package: %v", err)
 	}
 
-	for _, imported := range pkg.Imports {
+	all := make([]string, 0, len(pkg.Imports)+len(pkg.TestImports)+len(pkg.XTestImports))
+	all = append(all, pkg.Imports...)
+	all = append(all, pkg.TestImports...)
+	all = append(all, pkg.XTestImports...)
+
+	for _, imported := range all {
 		for _, bad := range forbidden {
 			if strings.HasPrefix(imported, bad) {
 				t.Errorf("internal/core must not import %q (matched forbidden prefix %q)", imported, bad)

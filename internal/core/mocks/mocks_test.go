@@ -14,7 +14,7 @@ func TestMocksSatisfyPorts(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	var (
-		_ core.ContextManager = mocks.NewMockContextManager(ctrl)
+		_ core.ContextManager  = mocks.NewMockContextManager(ctrl)
 		_ core.NamespaceLister = mocks.NewMockNamespaceLister(ctrl)
 		_ core.PodReader       = mocks.NewMockPodReader(ctrl)
 	)
