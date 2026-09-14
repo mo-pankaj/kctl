@@ -4,8 +4,8 @@ package ui
 import (
 	"fmt"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/bubbles/v2/key"
 	"go.uber.org/zap"
 
 	"github.com/mo-pankaj/kctl/internal/ui/keys"
@@ -41,7 +41,7 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.height = msg.Height
 		return m, cmd
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if key.Matches(msg, m.keys.Quit) {
 			return m, tea.Quit
 		}
@@ -51,8 +51,16 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 }
 
 // View satisfies tea.Model.
-func (m Model) View() (s string) {
+//
+// The root model is the only view that sets AltScreen: in Bubble Tea v2 the
+// alternate screen is a property of the rendered view rather than a program
+// option, and nested views must not fight the root over it.
+func (m Model) View() (v tea.View) {
 	help := m.keys.Quit.Help()
-	s = fmt.Sprintf("kctl\n\npress %s to %s\n", help.Key, help.Desc)
-	return s
+	body := fmt.Sprintf("kctl\n\npress %s to %s\n", help.Key, help.Desc)
+
+	v = tea.NewView(body)
+	v.AltScreen = true
+
+	return v
 }

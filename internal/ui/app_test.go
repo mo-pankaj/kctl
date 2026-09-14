@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/x/exp/teatest"
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/exp/teatest/v2"
 	"go.uber.org/zap"
 
 	"github.com/mo-pankaj/kctl/internal/ui"
@@ -21,7 +21,7 @@ func TestAppRendersAndQuitsOnQ(t *testing.T) {
 		return bytes.Contains(b, []byte("kctl"))
 	}, teatest.WithDuration(3*time.Second))
 
-	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	tm.Send(tea.KeyPressMsg{Code: 'q', Text: "q"})
 
 	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
 }

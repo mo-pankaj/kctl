@@ -1,7 +1,7 @@
 // Package keys holds every key binding kctl uses.
 package keys
 
-import "github.com/charmbracelet/bubbles/key"
+import "charm.land/bubbles/v2/key"
 
 // Map is the complete set of kctl key bindings.
 type Map struct {

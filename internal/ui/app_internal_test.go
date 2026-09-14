@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/bubbles/key"
+	"charm.land/bubbles/v2/key"
 	"go.uber.org/zap"
 )
 
@@ -17,7 +17,7 @@ func TestViewRendersQuitHintFromKeymap(t *testing.T) {
 	m := New(zap.NewNop())
 	m.keys.Quit = key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "exit"))
 
-	view := m.View()
+	view := m.View().Content
 
 	if !strings.Contains(view, "press x to exit") {
 		t.Fatalf("View() = %q, want it to contain the rebound hint %q", view, "press x to exit")

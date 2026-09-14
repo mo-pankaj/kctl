@@ -6,7 +6,7 @@ import (
 	"os"
 	"runtime/debug"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"go.uber.org/zap"
 
 	"github.com/mo-pankaj/kctl/internal/logging"
@@ -37,7 +37,7 @@ func run() (code int) {
 	}
 	defer func() { _ = logger.Sync() }()
 
-	program := tea.NewProgram(ui.New(logger), tea.WithAltScreen())
+	program := tea.NewProgram(ui.New(logger))
 
 	_, err = program.Run()
 	if err != nil {
