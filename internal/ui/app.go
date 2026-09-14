@@ -2,29 +2,43 @@
 package ui
 
 import (
-	"fmt"
-
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"go.uber.org/zap"
 
+	"github.com/mo-pankaj/kctl/internal/core"
+	"github.com/mo-pankaj/kctl/internal/theme"
 	"github.com/mo-pankaj/kctl/internal/ui/keys"
+	"github.com/mo-pankaj/kctl/internal/ui/statusbar"
 )
 
 // Model is the kctl root model.
 type Model struct {
-	logger *zap.Logger
-	keys   keys.Map
-	width  int
-	height int
+	logger   *zap.Logger
+	keys     keys.Map
+	styles   theme.Styles
+	contexts core.ContextManager
+	status   statusbar.Model
+	width    int
+	height   int
 }
 
 // New builds the root model.
-func New(logger *zap.Logger) (m Model) {
+func New(logger *zap.Logger, contexts core.ContextManager) (m Model) {
+	styles := theme.New()
+
 	m = Model{
-		logger: logger.With(zap.String("component", "root")),
-		keys:   keys.Default(),
+		logger:   logger.With(zap.String("component", "root")),
+		keys:     keys.Default(),
+		styles:   styles,
+		contexts: contexts,
+		status:   statusbar.New(styles),
 	}
+
+	current := contexts.Current()
+	m.status.Context = current.Name
+	m.status.Namespace = current.Namespace
+
 	return m
 }
 
@@ -39,6 +53,7 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.status.Width = msg.Width
 		return m, cmd
 
 	case tea.KeyPressMsg:
@@ -52,14 +67,15 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 // View satisfies tea.Model.
 //
-// The root model is the only view that sets AltScreen: in Bubble Tea v2 the
-// alternate screen is a property of the rendered view rather than a program
-// option, and nested views must not fight the root over it.
+// The root model is the only one that sets AltScreen: in v2 the alternate
+// screen is a property of the rendered view, not a program option.
 func (m Model) View() (v tea.View) {
-	help := m.keys.Quit.Help()
-	body := fmt.Sprintf("kctl\n\npress %s to %s\n", help.Key, help.Desc)
+	m.status.Width = m.width
 
-	v = tea.NewView(body)
+	body := "\n  no view loaded\n"
+	help := m.styles.Help.Render("  " + keys.HelpLine(m.keys.Quit))
+
+	v = tea.NewView(m.status.View() + "\n" + body + "\n" + help)
 	v.AltScreen = true
 
 	return v

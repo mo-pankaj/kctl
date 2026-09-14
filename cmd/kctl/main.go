@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"go.uber.org/zap"
 
+	"github.com/mo-pankaj/kctl/internal/kube"
 	"github.com/mo-pankaj/kctl/internal/logging"
 	"github.com/mo-pankaj/kctl/internal/ui"
 )
@@ -37,7 +38,13 @@ func run() (code int) {
 	}
 	defer func() { _ = logger.Sync() }()
 
-	program := tea.NewProgram(ui.New(logger))
+	store, err := kube.NewContextStore(logger, "")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "kctl: %v\n", err)
+		return 1
+	}
+
+	program := tea.NewProgram(ui.New(logger, store))
 
 	_, err = program.Run()
 	if err != nil {
