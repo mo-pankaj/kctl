@@ -15,6 +15,7 @@ import (
 	"github.com/mo-pankaj/kctl/internal/ui/keys"
 	"github.com/mo-pankaj/kctl/internal/ui/stack"
 	"github.com/mo-pankaj/kctl/internal/ui/statusbar"
+	"github.com/mo-pankaj/kctl/internal/ui/views/apply"
 	"github.com/mo-pankaj/kctl/internal/ui/views/ctxpicker"
 	"github.com/mo-pankaj/kctl/internal/ui/views/describe"
 	"github.com/mo-pankaj/kctl/internal/ui/views/logview"
@@ -55,11 +56,16 @@ type Model struct {
 	sel       core.Selector
 	session   *Session
 	switching bool
-	status    statusbar.Model
-	cmdBar    cmdbar.Model
-	stack     stack.Stack
-	width     int
-	height    int
+
+	applier       apply.Runner
+	parseManifest apply.Parser
+	risk          func(server string) bool
+
+	status statusbar.Model
+	cmdBar cmdbar.Model
+	stack  stack.Stack
+	width  int
+	height int
 }
 
 // New builds the root model.
@@ -98,6 +104,34 @@ func (m Model) WithSession(session *Session) (out Model) {
 	out = m
 
 	return out
+}
+
+// WithApplier enables the guarded apply flow. Without one, "a" does nothing —
+// which is what the view tests run with.
+func (m Model) WithApplier(runner apply.Runner, parse apply.Parser, protected func(server string) bool) (out Model) {
+	m.applier = runner
+	m.parseManifest = parse
+	m.risk = protected
+	out = m
+
+	return out
+}
+
+// applyTarget describes the cluster an apply would write to.
+func (m Model) applyTarget() (t apply.Target) {
+	current := m.contexts.Current()
+
+	t = apply.Target{
+		Context:   current.Name,
+		Server:    current.Server,
+		Namespace: m.sel.Namespace,
+	}
+
+	if m.risk != nil {
+		t.Protected = m.risk(current.Server)
+	}
+
+	return t
 }
 
 // Init satisfies tea.Model.
@@ -232,6 +266,12 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		if !typing {
 			if key.Matches(msg, m.keys.Quit) {
 				return m, tea.Quit
+			}
+
+			if key.Matches(msg, m.keys.Apply) && m.applier != nil {
+				m.stack.Push(apply.New(m.logger, m.styles, m.keys, m.applier, m.parseManifest, m.applyTarget()))
+
+				return m, m.stack.Top().Init()
 			}
 
 			if msg.String() == "c" {

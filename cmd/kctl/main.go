@@ -91,6 +91,38 @@ func run() (code int) {
 	model := ui.New(logger, store, active.Pods, core.Selector{Namespace: active.Namespace}).
 		WithSession(session)
 
+	// The apply flow is optional: kctl is fully usable read-only if the
+	// applier cannot be built for this cluster.
+	appCfg, err := kube.LoadConfig(kube.DefaultConfigPath())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "kctl: %v\n", err)
+		return 1
+	}
+
+	restCfg, err := store.RESTConfig(current.Name)
+	if err == nil {
+		applier, aerr := kube.NewApplier(logger, restCfg)
+		if aerr == nil {
+			parse := func(path, ns string) ([]core.Manifest, error) {
+				f, ferr := os.Open(path)
+				if ferr != nil {
+					return nil, fmt.Errorf("error-opening-manifest :%w", ferr)
+				}
+				defer func() { _ = f.Close() }()
+
+				return kube.ParseManifests(f, ns)
+			}
+
+			protected := func(server string) bool {
+				return kube.RiskFor(server, appCfg.Risk) == kube.RiskProtected
+			}
+
+			model = model.WithApplier(applier, parse, protected)
+		} else {
+			logger.Warn("apply-disabled", zap.Error(aerr))
+		}
+	}
+
 	program := tea.NewProgram(model)
 
 	_, err = program.Run()
