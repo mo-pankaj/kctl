@@ -8,6 +8,7 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/table"
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"go.uber.org/zap"
 
@@ -45,10 +46,14 @@ type Model struct {
 	reader core.PodReader
 	sel    core.Selector
 
-	table table.Model
-	pods  []core.Pod
-	dirty <-chan struct{}
-	err   error
+	table     table.Model
+	pods      []core.Pod
+	visible   []core.Pod
+	filter    textinput.Model
+	filtering bool
+	sortKey   SortKey
+	dirty     <-chan struct{}
+	err       error
 }
 
 // New builds the view.
@@ -61,6 +66,11 @@ func New(logger *zap.Logger, styles theme.Styles, k keys.Map, reader core.PodRea
 		sel:    sel,
 		table:  buildTable(nil, sel.AllNamespaces()),
 	}
+
+	input := textinput.New()
+	input.Prompt = "/"
+	input.CharLimit = 64
+	m.filter = input
 	return m
 }
 
@@ -142,7 +152,8 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case loadedMsg:
 		m.pods = msg.Pods
 		m.err = nil
-		m.table.SetRows(rowsFor(msg.Pods, m.sel.AllNamespaces(), time.Now()))
+		(&m).refresh()
+
 		return m, cmd
 
 	case ErrorMsg:
@@ -155,6 +166,43 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, cmd
 
 	case tea.KeyPressMsg:
+		if m.filtering {
+			switch msg.Code {
+			case tea.KeyEscape:
+				m.filtering = false
+				m.filter.SetValue("")
+				m.filter.Blur()
+				(&m).refresh()
+
+				return m, cmd
+
+			case tea.KeyEnter:
+				m.filtering = false
+				m.filter.Blur()
+
+				return m, cmd
+			}
+
+			m.filter, cmd = m.filter.Update(msg)
+			(&m).refresh()
+
+			return m, cmd
+		}
+
+		if key.Matches(msg, m.keys.Filter) {
+			m.filtering = true
+			m.filter.Focus()
+
+			return m, cmd
+		}
+
+		if key.Matches(msg, m.keys.SortCycle) {
+			m.sortKey = m.sortKey.Next()
+			(&m).refresh()
+
+			return m, cmd
+		}
+
 		if key.Matches(msg, m.keys.Select) {
 			return m, m.emitSelected()
 		}
@@ -167,11 +215,11 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 // emitSelected reports the highlighted pod.
 func (m Model) emitSelected() (cmd tea.Cmd) {
 	index := m.table.Cursor()
-	if index < 0 || index >= len(m.pods) {
+	if index < 0 || index >= len(m.visible) {
 		return cmd
 	}
 
-	pod := m.pods[index]
+	pod := m.visible[index]
 	cmd = func() tea.Msg {
 		return SelectedMsg{Pod: pod}
 	}
@@ -189,12 +237,30 @@ func (m Model) View() (v tea.View) {
 		return v
 	}
 
-	s = "\n" + m.table.View() + "\n" +
-		m.styles.Help.Render(fmt.Sprintf("  %d pods  ·  %s", len(m.pods),
-			keys.HelpLine(m.keys.Select, m.keys.Back))) + "\n"
+	header := ""
+	if m.filtering || m.filter.Value() != "" {
+		header = "  " + m.filter.View() + "\n"
+	}
+
+	s = "\n" + header + m.table.View() + "\n" +
+		m.styles.Help.Render(fmt.Sprintf("  %d/%d pods  ·  sort:%s  ·  %s",
+			len(m.visible), len(m.pods), m.sortKey,
+			keys.HelpLine(m.keys.Filter, m.keys.SortCycle, m.keys.Select, m.keys.Back))) + "\n"
 
 	v = tea.NewView(s)
 	return v
+}
+
+// refresh recomputes the visible rows from the last cache read.
+func (m *Model) refresh() {
+	m.visible = Sort(Filter(m.pods, m.filter.Value()), m.sortKey)
+	m.table.SetRows(rowsFor(m.visible, m.sel.AllNamespaces(), time.Now()))
+}
+
+// InputFocused reports whether the filter input is taking keystrokes.
+func (m Model) InputFocused() (focused bool) {
+	focused = m.filtering
+	return focused
 }
 
 func buildTable(pods []core.Pod, allNamespaces bool) (t table.Model) {

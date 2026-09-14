@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/exp/teatest/v2"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
@@ -122,4 +123,29 @@ func TestFormatAge(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSlashFiltersTheTableAndLetterKeysTypeIntoIt(t *testing.T) {
+	dirty := make(chan struct{}, 1)
+	dirty <- struct{}{}
+
+	tm := teatest.NewTestModel(t, newList(t, fixturePods(), dirty), teatest.WithInitialTermSize(140, 30))
+
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return bytes.Contains(b, []byte("worker-4k2"))
+	}, teatest.WithDuration(5*time.Second))
+
+	tm.Send(tea.KeyPressMsg{Code: '/', Text: "/"})
+
+	// 'q' must reach the filter input, not quit the program. This is the key
+	// routing rule: a focused input consumes keys before any global binding.
+	for _, r := range "worq" {
+		tm.Send(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return !bytes.Contains(b, []byte("api-7d9f-2xk9"))
+	}, teatest.WithDuration(5*time.Second))
+
+	tm.Quit()
 }

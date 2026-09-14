@@ -9,9 +9,11 @@ import (
 
 // Map is the complete set of kctl key bindings.
 type Map struct {
-	Quit   key.Binding
-	Back   key.Binding
-	Select key.Binding
+	Quit      key.Binding
+	Filter    key.Binding
+	SortCycle key.Binding
+	Back      key.Binding
+	Select    key.Binding
 }
 
 // Default returns the standard binding set.
@@ -28,6 +30,14 @@ func Default() (m Map) {
 		Select: key.NewBinding(
 			key.WithKeys("enter"),
 			key.WithHelp("enter", "select"),
+		),
+		Filter: key.NewBinding(
+			key.WithKeys("/"),
+			key.WithHelp("/", "filter"),
+		),
+		SortCycle: key.NewBinding(
+			key.WithKeys("s"),
+			key.WithHelp("s", "sort"),
 		),
 	}
 	return m

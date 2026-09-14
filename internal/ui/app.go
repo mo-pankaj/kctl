@@ -15,6 +15,13 @@ import (
 	"github.com/mo-pankaj/kctl/internal/ui/views/podlist"
 )
 
+// inputFocuser is implemented by views that own a text input. While one reports
+// true, global single-letter bindings are suppressed so typing works — otherwise
+// typing "q" into a filter would quit the program.
+type inputFocuser interface {
+	InputFocused() bool
+}
+
 // Model is the kctl root model.
 type Model struct {
 	logger   *zap.Logger
@@ -83,19 +90,24 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// Fall through so the picker renders its own error state too.
 
 	case tea.KeyPressMsg:
-		if key.Matches(msg, m.keys.Quit) {
-			return m, tea.Quit
-		}
+		focuser, ok := m.stack.Top().(inputFocuser)
+		typing := ok && focuser.InputFocused()
 
-		if msg.String() == "c" {
-			m.stack.Push(ctxpicker.New(m.logger, m.styles, m.keys, m.contexts))
-			return m, m.stack.Top().Init()
-		}
+		if !typing {
+			if key.Matches(msg, m.keys.Quit) {
+				return m, tea.Quit
+			}
 
-		if key.Matches(msg, m.keys.Back) {
-			popped := m.stack.Pop()
-			if popped {
-				return m, cmd
+			if msg.String() == "c" {
+				m.stack.Push(ctxpicker.New(m.logger, m.styles, m.keys, m.contexts))
+				return m, m.stack.Top().Init()
+			}
+
+			if key.Matches(msg, m.keys.Back) {
+				popped := m.stack.Pop()
+				if popped {
+					return m, cmd
+				}
 			}
 		}
 	}
