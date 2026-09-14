@@ -4,8 +4,8 @@ package ui
 import (
 	"fmt"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 	"go.uber.org/zap"
 
 	"github.com/mo-pankaj/kctl/internal/ui/keys"
