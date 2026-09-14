@@ -8,6 +8,7 @@ import (
 
 	"github.com/mo-pankaj/kctl/internal/core"
 	"github.com/mo-pankaj/kctl/internal/theme"
+	"github.com/mo-pankaj/kctl/internal/ui/cmdbar"
 	"github.com/mo-pankaj/kctl/internal/ui/keys"
 	"github.com/mo-pankaj/kctl/internal/ui/stack"
 	"github.com/mo-pankaj/kctl/internal/ui/statusbar"
@@ -31,6 +32,7 @@ type Model struct {
 	pods     core.PodReader
 	sel      core.Selector
 	status   statusbar.Model
+	cmdBar   cmdbar.Model
 	stack    stack.Stack
 	width    int
 	height   int
@@ -48,6 +50,7 @@ func New(logger *zap.Logger, contexts core.ContextManager, pods core.PodReader, 
 		pods:     pods,
 		sel:      sel,
 		status:   statusbar.New(styles),
+		cmdBar:   cmdbar.New(styles),
 	}
 
 	current := contexts.Current()
@@ -89,7 +92,22 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.status.Message = msg.Err.Error()
 		// Fall through so the picker renders its own error state too.
 
+	case cmdbar.SubmitMsg:
+		return m.runCommand(msg.Command)
+
 	case tea.KeyPressMsg:
+		if m.cmdBar.Focused() {
+			m.cmdBar, cmd = m.cmdBar.Update(msg)
+
+			return m, cmd
+		}
+
+		if key.Matches(msg, m.keys.Command) {
+			m.cmdBar.Open()
+
+			return m, cmd
+		}
+
 		focuser, ok := m.stack.Top().(inputFocuser)
 		typing := ok && focuser.InputFocused()
 
@@ -123,6 +141,38 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	return m, cmd
 }
 
+// runCommand applies a parsed command bar command.
+func (m Model) runCommand(c cmdbar.Command) (model tea.Model, cmd tea.Cmd) {
+	switch c.Verb {
+	case cmdbar.VerbContext:
+		m.stack.Push(ctxpicker.New(m.logger, m.styles, m.keys, m.contexts))
+
+		return m, m.stack.Top().Init()
+
+	case cmdbar.VerbNamespace:
+		namespace := c.Arg
+		if namespace == "all" {
+			namespace = ""
+		}
+
+		return m.switchNamespace(namespace)
+	}
+
+	return m, cmd
+}
+
+// switchNamespace re-scopes the pod list. Task 12 replaces this with the full
+// teardown/resync sequence once sources are rebuilt per context.
+func (m Model) switchNamespace(namespace string) (model tea.Model, cmd tea.Cmd) {
+	m.sel.Namespace = namespace
+	m.status.Namespace = namespace
+	m.stack.Replace(podlist.New(m.logger, m.styles, m.keys, m.pods, m.sel))
+
+	cmd = m.stack.Top().Init()
+
+	return m, cmd
+}
+
 // View satisfies tea.Model.
 //
 // Child views are tea.Models, so their View() returns a tea.View; the root
@@ -135,9 +185,14 @@ func (m Model) View() (v tea.View) {
 		body = top.View().Content
 	}
 
-	help := m.styles.Help.Render("  " + keys.HelpLine(m.keys.Quit))
+	help := m.styles.Help.Render("  " + keys.HelpLine(m.keys.Command, m.keys.Quit))
 
-	v = tea.NewView(m.status.View() + "\n" + body + "\n" + help)
+	bar := m.cmdBar.View()
+	if bar != "" {
+		bar += "\n"
+	}
+
+	v = tea.NewView(m.status.View() + "\n" + bar + body + "\n" + help)
 	v.AltScreen = true
 
 	return v
