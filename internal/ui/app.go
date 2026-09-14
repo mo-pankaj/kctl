@@ -134,6 +134,24 @@ func (m Model) applyTarget() (t apply.Target) {
 	return t
 }
 
+// pushSized pushes a view and immediately hands it the current terminal size.
+//
+// Bubble Tea only delivers WindowSizeMsg on a real resize, so a view pushed
+// after startup would otherwise never learn how big it is — and a viewport
+// sized zero renders nothing at all. That looked exactly like the key not
+// working.
+func (m *Model) pushSized(view tea.Model) (cmd tea.Cmd) {
+	if m.width > 0 && m.height > 0 {
+		sized, _ := view.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
+		view = sized
+	}
+
+	m.stack.Push(view)
+	cmd = view.Init()
+
+	return cmd
+}
+
 // Init satisfies tea.Model.
 func (m Model) Init() (cmd tea.Cmd) {
 	top := m.stack.Top()
@@ -205,9 +223,10 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.status.Context = msg.Active.Context
 		m.status.Namespace = msg.Active.Namespace
 		m.status.Message = ""
-		m.stack.Replace(podlist.New(m.logger, m.styles, m.keys, m.pods, m.sel))
+		m.stack.Pop()
+		cmd = (&m).pushSized(podlist.New(m.logger, m.styles, m.keys, m.pods, m.sel))
 
-		return m, m.stack.Top().Init()
+		return m, cmd
 
 	case ctxpicker.ErrorMsg:
 		m.status.Message = msg.Err.Error()
@@ -223,9 +242,9 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			return m, cmd
 		}
 
-		m.stack.Push(describe.New(m.logger, m.styles, m.keys, describer, msg.Pod.Namespace, msg.Pod.Name))
+		cmd = (&m).pushSized(describe.New(m.logger, m.styles, m.keys, describer, msg.Pod.Namespace, msg.Pod.Name))
 
-		return m, m.stack.Top().Init()
+		return m, cmd
 
 	case podlist.SelectedMsg:
 		container := ""
@@ -240,9 +259,9 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			Follow:    true,
 		}
 
-		m.stack.Push(logview.New(m.logger, m.styles, m.keys, m.pods, req))
+		cmd = (&m).pushSized(logview.New(m.logger, m.styles, m.keys, m.pods, req))
 
-		return m, m.stack.Top().Init()
+		return m, cmd
 
 	case cmdbar.SubmitMsg:
 		return m.runCommand(msg.Command)
@@ -269,14 +288,15 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			}
 
 			if key.Matches(msg, m.keys.Apply) && m.applier != nil {
-				m.stack.Push(apply.New(m.logger, m.styles, m.keys, m.applier, m.parseManifest, m.applyTarget()))
+				cmd = (&m).pushSized(apply.New(m.logger, m.styles, m.keys, m.applier, m.parseManifest, m.applyTarget()))
 
-				return m, m.stack.Top().Init()
+				return m, cmd
 			}
 
 			if msg.String() == "c" {
-				m.stack.Push(ctxpicker.New(m.logger, m.styles, m.keys, m.contexts))
-				return m, m.stack.Top().Init()
+				cmd = (&m).pushSized(ctxpicker.New(m.logger, m.styles, m.keys, m.contexts))
+
+				return m, cmd
 			}
 
 			if key.Matches(msg, m.keys.Back) {
@@ -333,9 +353,9 @@ func (m Model) switchTo(contextName, namespace string) (cmd tea.Cmd) {
 func (m Model) runCommand(c cmdbar.Command) (model tea.Model, cmd tea.Cmd) {
 	switch c.Verb {
 	case cmdbar.VerbContext:
-		m.stack.Push(ctxpicker.New(m.logger, m.styles, m.keys, m.contexts))
+		cmd = (&m).pushSized(ctxpicker.New(m.logger, m.styles, m.keys, m.contexts))
 
-		return m, m.stack.Top().Init()
+		return m, cmd
 
 	case cmdbar.VerbNamespace:
 		namespace := c.Arg

@@ -142,3 +142,26 @@ func TestStatusBarFollowsTheSelectorNotTheContextDefault(t *testing.T) {
 		t.Fatal("status bar reported the context's default namespace instead of the selector in use")
 	}
 }
+
+func TestPushedViewsReceiveTheCurrentSize(t *testing.T) {
+	var m tea.Model = rootWithMocks(t)
+
+	// Startup size, as Bubble Tea delivers it once.
+	m, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	// Open the context picker, which is pushed AFTER that size arrived.
+	m, cmd := m.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
+	if cmd != nil {
+		if msg := cmd(); msg != nil {
+			m, _ = m.Update(msg)
+		}
+	}
+
+	// A view pushed without being handed the size renders an empty body: its
+	// viewport or table has zero height. That looked exactly like the key not
+	// working at all.
+	body := m.View().Content
+	if !strings.Contains(body, "kind-dev") {
+		t.Fatalf("pushed view rendered no content — it was never given the window size\n%s", body)
+	}
+}
