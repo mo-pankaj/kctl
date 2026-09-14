@@ -9,6 +9,7 @@ import (
 	"github.com/mo-pankaj/kctl/internal/core"
 	"github.com/mo-pankaj/kctl/internal/theme"
 	"github.com/mo-pankaj/kctl/internal/ui/keys"
+	"github.com/mo-pankaj/kctl/internal/ui/stack"
 	"github.com/mo-pankaj/kctl/internal/ui/statusbar"
 )
 
@@ -19,6 +20,7 @@ type Model struct {
 	styles   theme.Styles
 	contexts core.ContextManager
 	status   statusbar.Model
+	stack    stack.Stack
 	width    int
 	height   int
 }
@@ -54,25 +56,44 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.status.Width = msg.Width
-		return m, cmd
+		// Fall through so the visible view also learns the new size.
 
 	case tea.KeyPressMsg:
 		if key.Matches(msg, m.keys.Quit) {
 			return m, tea.Quit
 		}
+
+		if key.Matches(msg, m.keys.Back) {
+			popped := m.stack.Pop()
+			if popped {
+				return m, cmd
+			}
+		}
 	}
+
+	top := m.stack.Top()
+	if top == nil {
+		return m, cmd
+	}
+
+	updated, cmd := top.Update(msg)
+	m.stack.Replace(updated)
 
 	return m, cmd
 }
 
 // View satisfies tea.Model.
 //
-// The root model is the only one that sets AltScreen: in v2 the alternate
-// screen is a property of the rendered view, not a program option.
+// Child views are tea.Models, so their View() returns a tea.View; the root
+// embeds their rendered Content and owns AltScreen for the whole program.
 func (m Model) View() (v tea.View) {
-	m.status.Width = m.width
-
 	body := "\n  no view loaded\n"
+
+	top := m.stack.Top()
+	if top != nil {
+		body = top.View().Content
+	}
+
 	help := m.styles.Help.Render("  " + keys.HelpLine(m.keys.Quit))
 
 	v = tea.NewView(m.status.View() + "\n" + body + "\n" + help)
