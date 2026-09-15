@@ -147,6 +147,9 @@ That file is for forensics. Anything you need to act on is shown in the UI.
 
 ## Layout
 
+> Working on the code? [ARCHITECTURE.md](ARCHITECTURE.md) covers the layering, how a
+> keystroke is routed, how to add a view, and the traps this codebase has already hit.
+
 ```
 cmd/kctl           entry point, logger, panic guard
 internal/core      domain types and role interfaces — imports only the stdlib
