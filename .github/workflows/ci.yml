@@ -44,8 +44,25 @@ jobs:
             exit 1
           fi
 
+      # The apply path can damage a cluster, and client-go's fake clientset does
+      # not implement server-side apply — no field ownership, no dry run, no 409.
+      # Those tests need a real API server or they prove nothing.
+      - name: Install envtest binaries
+        run: |
+          go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+          echo "KUBEBUILDER_ASSETS=$(setup-envtest use 1.33.0 -p path)" >> "$GITHUB_ENV"
+
       - name: Test
         run: go test ./... -race -count=1 -coverprofile=coverage.out
+
+      - name: Fail if the apply path lost its coverage
+        run: |
+          pct=$(go tool cover -func=coverage.out | grep "kube/apply.go" | awk '{gsub("%","",$3); s+=$3; n++} END {printf "%.0f", s/n}')
+          echo "internal/kube/apply.go: ${pct}%"
+          if [ "$pct" -lt 60 ]; then
+            echo "The code that writes to clusters must stay tested. Did envtest silently skip?"
+            exit 1
+          fi
 
       - name: Coverage
         run: go tool cover -func=coverage.out | tail -1
