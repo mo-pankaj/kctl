@@ -11,11 +11,62 @@ import (
 	"github.com/mo-pankaj/kctl/internal/theme"
 )
 
-// Verbs recognised in v0.1.
+// Recognised verbs.
 const (
 	VerbNamespace = "ns"
 	VerbContext   = "ctx"
+	VerbSort      = "sort"
+	VerbFilter    = "filter"
+	VerbQuit      = "q"
 )
+
+// verbs describes every command, and is the single source for both validation
+// and the hint shown to the user. A command that exists but is undocumented
+// here would be undiscoverable, so they are deliberately the same list.
+var verbs = []struct {
+	Name    string
+	Aliases []string
+	Arg     string
+	Help    string
+}{
+	{Name: VerbNamespace, Aliases: []string{"namespace"}, Arg: "<name>|all", Help: "scope the list to a namespace"},
+	{Name: VerbContext, Aliases: []string{"context"}, Arg: "", Help: "open the context picker"},
+	{Name: VerbSort, Aliases: nil, Arg: "name|status|restarts|age", Help: "sort by a column"},
+	{Name: VerbFilter, Aliases: nil, Arg: "<expr>", Help: "filter, e.g. status:crash"},
+	{Name: VerbQuit, Aliases: []string{"quit"}, Arg: "", Help: "quit"},
+}
+
+// Verbs renders the command list for the hint line.
+func Verbs() (lines []string) {
+	for _, v := range verbs {
+		name := v.Name
+		if v.Arg != "" {
+			name += " " + v.Arg
+		}
+
+		lines = append(lines, name)
+	}
+
+	return lines
+}
+
+// canonical resolves a typed verb, following aliases. ok is false when the verb
+// is not recognised.
+func canonical(typed string) (name string, ok bool) {
+	for _, v := range verbs {
+		if typed == v.Name {
+			return v.Name, true
+		}
+
+		for _, a := range v.Aliases {
+			if typed == a {
+				return v.Name, true
+			}
+		}
+	}
+
+	return name, ok
+}
 
 // Command is a parsed command line.
 type Command struct {
@@ -114,14 +165,21 @@ func (m Model) Update(msg tea.Msg) (model Model, cmd tea.Cmd) {
 func (m Model) View() (s string) {
 	if m.open {
 		s = "  " + m.input.View()
+
+		// An empty bar is the moment the user does not know what to type.
+		if m.input.Value() == "" {
+			s += "\n" + m.styles.Dimmed.Render("  "+strings.Join(Verbs(), "   "))
+		}
 	}
 
 	if m.err != nil {
+		// Its own line, not appended: the input is width-padded, so anything
+		// after it lands past the right edge of the terminal and is invisible.
 		if s != "" {
-			s += "  "
+			s += "\n"
 		}
 
-		s += m.styles.StatusError.Render(m.err.Error())
+		s += m.styles.StatusError.Render("  " + m.err.Error())
 	}
 
 	return s
@@ -131,24 +189,35 @@ func (m Model) View() (s string) {
 func Parse(input string) (c Command, err error) {
 	trimmed := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(input), ":"))
 	if trimmed == "" {
-		err = fmt.Errorf("error-empty-command")
+		err = fmt.Errorf("type a command: %s", strings.Join(Verbs(), ", "))
+
 		return c, err
 	}
 
 	fields := strings.Fields(trimmed)
+	typed := strings.ToLower(fields[0])
 
-	c.Verb = strings.ToLower(fields[0])
-	if len(fields) > 1 {
-		c.Arg = strings.Join(fields[1:], " ")
-	}
+	// A user reaching for the command bar to type a filter is reaching for the
+	// wrong key, not making a mistake. Say so rather than calling it unknown.
+	if strings.Contains(typed, ":") {
+		err = fmt.Errorf("%q looks like a filter — press / to filter, : is for commands", typed)
 
-	switch c.Verb {
-	case VerbNamespace, VerbContext:
 		return c, err
 	}
 
-	err = fmt.Errorf("error-unknown-command :%s", c.Verb)
-	c = Command{}
+	name, ok := canonical(typed)
+	if !ok {
+		// User-facing, so no error- prefix: this is read on screen, not grepped
+		// in a log.
+		err = fmt.Errorf("no command %q. try: %s", typed, strings.Join(Verbs(), ", "))
+
+		return c, err
+	}
+
+	c.Verb = name
+	if len(fields) > 1 {
+		c.Arg = strings.Join(fields[1:], " ")
+	}
 
 	return c, err
 }

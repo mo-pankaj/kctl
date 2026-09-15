@@ -23,6 +23,16 @@ type SelectedMsg struct {
 	Pod core.Pod
 }
 
+// SortMsg asks the list to sort by a named column, as ":sort age" does.
+type SortMsg struct {
+	Column string
+}
+
+// FilterMsg sets the filter expression, as ":filter status:crash" does.
+type FilterMsg struct {
+	Expr string
+}
+
 // DescribeMsg reports that the user asked to describe a pod.
 type DescribeMsg struct {
 	Pod core.Pod
@@ -176,6 +186,28 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// Without a width the input renders wider than the terminal and wraps,
 		// which puts the tail of what you typed on the line above the prompt.
 		m.filter.SetWidth(maxInt(20, msg.Width-6))
+
+		return m, cmd
+
+	case SortMsg:
+		key, ok := ParseSortKey(msg.Column)
+		if !ok {
+			m.err = fmt.Errorf("no sort column %q. try: name, status, restarts, age", msg.Column)
+
+			return m, cmd
+		}
+
+		m.sortKey = key
+		m.sortDir = DefaultDir(key)
+		m.err = nil
+		(&m).refresh()
+
+		return m, cmd
+
+	case FilterMsg:
+		m.filter.SetValue(msg.Expr)
+		m.err = nil
+		(&m).refresh()
 
 		return m, cmd
 

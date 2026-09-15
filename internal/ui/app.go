@@ -388,6 +388,20 @@ func (m Model) switchTo(contextName, namespace string) (cmd tea.Cmd) {
 	return cmd
 }
 
+// forward hands a message to the visible view. Commands that act on a list
+// belong to whichever view is showing one, not to the root.
+func (m Model) forward(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
+	top := m.stack.Top()
+	if top == nil {
+		return m, cmd
+	}
+
+	updated, cmd := top.Update(msg)
+	m.stack.Replace(updated)
+
+	return m, cmd
+}
+
 // runCommand applies a parsed command bar command.
 func (m Model) runCommand(c cmdbar.Command) (model tea.Model, cmd tea.Cmd) {
 	switch c.Verb {
@@ -395,6 +409,15 @@ func (m Model) runCommand(c cmdbar.Command) (model tea.Model, cmd tea.Cmd) {
 		cmd = (&m).pushSized(ctxpicker.New(m.logger, m.styles, m.keys, m.contexts))
 
 		return m, cmd
+
+	case cmdbar.VerbQuit:
+		return m, tea.Quit
+
+	case cmdbar.VerbSort:
+		return m.forward(podlist.SortMsg{Column: c.Arg})
+
+	case cmdbar.VerbFilter:
+		return m.forward(podlist.FilterMsg{Expr: c.Arg})
 
 	case cmdbar.VerbNamespace:
 		namespace := c.Arg

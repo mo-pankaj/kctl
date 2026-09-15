@@ -44,6 +44,25 @@ func (k SortKey) Next() (next SortKey) {
 	return next
 }
 
+// ParseSortKey resolves a column name typed by the user.
+func ParseSortKey(name string) (k SortKey, ok bool) {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "name", "n":
+		return SortName, true
+
+	case "status", "s":
+		return SortStatus, true
+
+	case "restarts", "r":
+		return SortRestarts, true
+
+	case "age", "a":
+		return SortAge, true
+	}
+
+	return k, ok
+}
+
 // SortDir is the direction a sort runs in.
 type SortDir int
 

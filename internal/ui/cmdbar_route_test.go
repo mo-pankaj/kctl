@@ -109,8 +109,16 @@ func TestUnknownCommandShowsAnErrorAndDoesNotCrash(t *testing.T) {
 	m = typeInto(t, m, "frobnicate")
 	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
-	if !strings.Contains(m.View().Content, "error-unknown-command") {
-		t.Fatalf("expected an inline error for an unknown verb; view = %q", m.View().Content)
+	// The message is written for a screen, so it names the mistake and lists
+	// the alternatives rather than carrying the internal error- prefix.
+	view := m.View().Content
+
+	if !strings.Contains(view, `no command "frobnicate"`) {
+		t.Fatalf("expected an inline error naming the unknown verb; view = %q", view)
+	}
+
+	if !strings.Contains(view, "sort") || !strings.Contains(view, "filter") {
+		t.Fatalf("the error should list what is valid; view = %q", view)
 	}
 
 	_ = cmdbar.VerbNamespace
