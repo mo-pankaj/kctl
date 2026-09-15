@@ -292,7 +292,7 @@ func TestForceAppliesAndTransfersOwnership(t *testing.T) {
 	// is a separate armed action in the UI.
 	var kctlOwns bool
 	for _, mf := range live.ManagedFields {
-		if mf.Manager == "kctl" && mf.FieldsV1 != nil && strings.Contains(string(mf.FieldsV1.Raw), "tier") {
+		if mf.Manager == "kctl" && mf.FieldsV1 != nil && strings.Contains(string(mf.FieldsV1.GetRawBytes()), "tier") {
 			kctlOwns = true
 		}
 	}
