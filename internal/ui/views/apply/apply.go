@@ -224,6 +224,8 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.width = msg.Width
 		m.viewport.SetWidth(msg.Width)
 		m.viewport.SetHeight(maxInt(3, msg.Height-12))
+		m.path.SetWidth(maxInt(20, msg.Width-10))
+		m.confirm.SetWidth(maxInt(20, msg.Width-28))
 
 		return m, cmd
 

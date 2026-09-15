@@ -42,8 +42,11 @@ context's namespace. It reads `KUBECONFIG` if set, otherwise `~/.kube/config`.
 | Key | Action |
 | --- | --- |
 | `↑` `↓` | Move the selection |
-| `/` | Filter the list by name; `esc` clears it |
-| `s` | Cycle the sort order: name → status → restarts → age |
+| `/` | Filter — by name, or by column (see below); `esc` clears it |
+| `s` | Cycle the sort column: name → status → restarts → age |
+| `S` | Reverse the sort direction |
+| `c` | Contexts |
+| `N` | Namespaces |
 | `enter` | Tail the selected pod's logs |
 | `d` | Describe the selected pod, with its events |
 | `a` | Apply a manifest, after showing the diff |
@@ -56,6 +59,31 @@ context's namespace. It reads `KUBECONFIG` if set, otherwise `~/.kube/config`.
 
 While a filter or the command bar has focus, letter keys type into it — `q` does not
 quit mid-word.
+
+## Sorting
+
+The sort column and direction are always shown: `sort:age↑`. Each column starts
+in the direction that answers the question it is usually asked for — names
+ascending, most-restarted first, newest first. `S` reverses any of them.
+
+Name is the final tiebreak on every column, so rows that compare equal do not
+reshuffle between refreshes.
+
+## Filtering
+
+A bare word matches the pod name. `column:value` matches that column, and terms
+are ANDed:
+
+```
+api                      name contains "api"
+status:crash             the crashlooping pods
+ns:kube-system api       both
+restarts:1               at least one restart
+```
+
+Columns: `name` `status` (`s`) `ns` `node` `ready` `restarts`. An unknown column
+matches nothing rather than everything, so a typo shows an empty list instead of
+quietly ignoring the filter.
 
 ## Commands
 

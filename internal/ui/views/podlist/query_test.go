@@ -101,28 +101,30 @@ func TestSort(t *testing.T) {
 			want: []string{"api-7d9f-2xk9", "API-Gateway-1", "worker-4k2"},
 		},
 		{
-			name: "by age puts the oldest first",
+			name: "ascending age is youngest first",
 			key:  podlist.SortAge,
-			want: []string{"API-Gateway-1", "worker-4k2", "api-7d9f-2xk9"},
+			// The arrow describes AGE, not the timestamp: ascending means the
+			// smallest age, which is the most recently created pod.
+			want: []string{"api-7d9f-2xk9", "worker-4k2", "API-Gateway-1"},
 		},
 		{
-			name: "by restarts puts the most-restarted first",
+			name: "ascending restarts is fewest first",
 			key:  podlist.SortRestarts,
-			want: []string{"worker-4k2", "api-7d9f-2xk9", "API-Gateway-1"},
+			want: []string{"API-Gateway-1", "api-7d9f-2xk9", "worker-4k2"},
 		},
 		{
-			name: "by status groups alphabetically, stably",
+			name: "by status, then by name",
 			key:  podlist.SortStatus,
-			// CrashLoopBackOff sorts before Running. The two Running pods keep
-			// their fixture order because the sort is stable — that is what stops
-			// the table reshuffling on every poke.
-			want: []string{"worker-4k2", "API-Gateway-1", "api-7d9f-2xk9"},
+			// CrashLoopBackOff sorts before Running. The two Running pods are
+			// then ordered by name, so the result does not depend on the order
+			// the cache happened to return them in.
+			want: []string{"worker-4k2", "api-7d9f-2xk9", "API-Gateway-1"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := names(podlist.Sort(queryFixture(), tt.key))
+			got := names(podlist.Sort(queryFixture(), tt.key, podlist.Asc))
 
 			for i := range tt.want {
 				if got[i] != tt.want[i] {
@@ -133,17 +135,137 @@ func TestSort(t *testing.T) {
 	}
 }
 
-func TestSortIsStableWithinEqualKeys(t *testing.T) {
-	// Two pods with identical status must keep their relative order, so the
-	// table does not reshuffle on every poke.
-	pods := []core.Pod{
+func TestSortDoesNotDependOnInputOrder(t *testing.T) {
+	// Equal on the sorted column, so only the name tiebreak can order them.
+	// Feeding the same pods in either order must give the same result, because
+	// the informer cache makes no promise about the order it returns.
+	forward := []core.Pod{
+		{Name: "a", Status: "Running"},
+		{Name: "b", Status: "Running"},
+	}
+	reversed := []core.Pod{
 		{Name: "b", Status: "Running"},
 		{Name: "a", Status: "Running"},
 	}
 
-	got := names(podlist.Sort(pods, podlist.SortStatus))
+	one := names(podlist.Sort(forward, podlist.SortStatus, podlist.Asc))
+	two := names(podlist.Sort(reversed, podlist.SortStatus, podlist.Asc))
 
-	if got[0] != "b" || got[1] != "a" {
-		t.Fatalf("Sort was not stable: got %v, want [b a]", got)
+	if one[0] != "a" || one[1] != "b" {
+		t.Fatalf("Sort = %v, want [a b]", one)
+	}
+
+	if two[0] != one[0] || two[1] != one[1] {
+		t.Fatalf("result depends on input order: %v vs %v", one, two)
+	}
+}
+
+func TestSortDirectionReversesTheOrder(t *testing.T) {
+	asc := names(podlist.Sort(queryFixture(), podlist.SortName, podlist.Asc))
+	desc := names(podlist.Sort(queryFixture(), podlist.SortName, podlist.Desc))
+
+	if len(asc) != len(desc) {
+		t.Fatalf("different lengths: %v vs %v", asc, desc)
+	}
+
+	for i := range asc {
+		if asc[i] != desc[len(desc)-1-i] {
+			t.Fatalf("descending is not the reverse of ascending:\nasc  %v\ndesc %v", asc, desc)
+		}
+	}
+}
+
+func TestNameIsAlwaysTheFinalTiebreak(t *testing.T) {
+	// Same status, same restarts: only the name can order these, and it must do
+	// so deterministically or the table reshuffles on every poke.
+	pods := []core.Pod{
+		{Name: "zebra", Status: "Running"},
+		{Name: "alpha", Status: "Running"},
+		{Name: "mango", Status: "Running"},
+	}
+
+	got := names(podlist.Sort(pods, podlist.SortStatus, podlist.Asc))
+
+	want := []string{"alpha", "mango", "zebra"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("Sort = %v, want %v (name as tiebreak)", got, want)
+		}
+	}
+}
+
+func TestDefaultDirectionSuitsTheColumn(t *testing.T) {
+	tests := []struct {
+		key  podlist.SortKey
+		want podlist.SortDir
+	}{
+		{key: podlist.SortName, want: podlist.Asc},
+		{key: podlist.SortStatus, want: podlist.Asc},
+		// The most-restarted pod is the question being asked.
+		{key: podlist.SortRestarts, want: podlist.Desc},
+		// Ascending AGE is the smallest age, i.e. newest first — which is what
+		// "what just changed?" means. Descending would be oldest first.
+		{key: podlist.SortAge, want: podlist.Asc},
+	}
+
+	for _, tt := range tests {
+		if got := podlist.DefaultDir(tt.key); got != tt.want {
+			t.Fatalf("DefaultDir(%v) = %v, want %v", tt.key, got, tt.want)
+		}
+	}
+}
+
+func TestSortDirRendersAnArrow(t *testing.T) {
+	if podlist.Asc.String() != "↑" || podlist.Desc.String() != "↓" {
+		t.Fatalf("directions render as %q/%q", podlist.Asc, podlist.Desc)
+	}
+
+	if podlist.Asc.Toggle() != podlist.Desc || podlist.Desc.Toggle() != podlist.Asc {
+		t.Fatal("Toggle does not flip")
+	}
+}
+
+func columnFixture() []core.Pod {
+	return []core.Pod{
+		{Name: "api-1", Namespace: "prod", Status: "Running", Node: "node-a", Restarts: 0, ReadyCount: 1, TotalCount: 1},
+		{Name: "api-2", Namespace: "staging", Status: "CrashLoopBackOff", Node: "node-b", Restarts: 7, ReadyCount: 0, TotalCount: 1},
+		{Name: "worker-1", Namespace: "prod", Status: "Pending", Node: "node-a", Restarts: 2, ReadyCount: 0, TotalCount: 2},
+	}
+}
+
+func TestFilterByColumn(t *testing.T) {
+	tests := []struct {
+		name  string
+		query string
+		want  []string
+	}{
+		{name: "bare word still matches the name", query: "api", want: []string{"api-1", "api-2"}},
+		{name: "status", query: "status:crash", want: []string{"api-2"}},
+		{name: "status shorthand", query: "s:pending", want: []string{"worker-1"}},
+		{name: "namespace", query: "ns:prod", want: []string{"api-1", "worker-1"}},
+		{name: "node", query: "node:node-b", want: []string{"api-2"}},
+		{name: "ready", query: "ready:0/2", want: []string{"worker-1"}},
+		{name: "restarts is a threshold", query: "restarts:2", want: []string{"api-2", "worker-1"}},
+		{name: "terms are ANDed", query: "ns:prod status:running", want: []string{"api-1"}},
+		{name: "column and bare word combine", query: "ns:prod worker", want: []string{"worker-1"}},
+		{name: "matching is case insensitive", query: "STATUS:RUNNING", want: []string{"api-1"}},
+		{name: "an unknown column matches nothing", query: "colour:blue", want: nil},
+		{name: "a typo shows an empty list, not everything", query: "stats:running", want: nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := names(podlist.Filter(columnFixture(), tt.query))
+
+			if len(got) != len(tt.want) {
+				t.Fatalf("Filter(%q) = %v, want %v", tt.query, got, tt.want)
+			}
+
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Fatalf("Filter(%q) = %v, want %v", tt.query, got, tt.want)
+				}
+			}
+		})
 	}
 }

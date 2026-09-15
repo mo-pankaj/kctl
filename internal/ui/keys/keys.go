@@ -9,17 +9,20 @@ import (
 
 // Map is the complete set of kctl key bindings.
 type Map struct {
-	Quit      key.Binding
-	ForceQuit key.Binding
-	Filter    key.Binding
-	SortCycle key.Binding
-	Command   key.Binding
-	Follow    key.Binding
-	Retry     key.Binding
-	Describe  key.Binding
-	Apply     key.Binding
-	Back      key.Binding
-	Select    key.Binding
+	Quit        key.Binding
+	ForceQuit   key.Binding
+	Filter      key.Binding
+	SortCycle   key.Binding
+	SortReverse key.Binding
+	Command     key.Binding
+	Follow      key.Binding
+	Retry       key.Binding
+	Describe    key.Binding
+	Apply       key.Binding
+	Contexts    key.Binding
+	Namespaces  key.Binding
+	Back        key.Binding
+	Select      key.Binding
 }
 
 // Default returns the standard binding set.
@@ -52,6 +55,10 @@ func Default() (m Map) {
 			key.WithKeys("s"),
 			key.WithHelp("s", "sort"),
 		),
+		SortReverse: key.NewBinding(
+			key.WithKeys("S"),
+			key.WithHelp("S", "reverse"),
+		),
 		Command: key.NewBinding(
 			key.WithKeys(":"),
 			key.WithHelp(":", "command"),
@@ -71,6 +78,14 @@ func Default() (m Map) {
 		Apply: key.NewBinding(
 			key.WithKeys("a"),
 			key.WithHelp("a", "apply"),
+		),
+		Contexts: key.NewBinding(
+			key.WithKeys("c"),
+			key.WithHelp("c", "contexts"),
+		),
+		Namespaces: key.NewBinding(
+			key.WithKeys("N"),
+			key.WithHelp("N", "namespaces"),
 		),
 	}
 	return m

@@ -19,6 +19,7 @@ import (
 	"github.com/mo-pankaj/kctl/internal/ui/views/ctxpicker"
 	"github.com/mo-pankaj/kctl/internal/ui/views/describe"
 	"github.com/mo-pankaj/kctl/internal/ui/views/logview"
+	"github.com/mo-pankaj/kctl/internal/ui/views/nspicker"
 	"github.com/mo-pankaj/kctl/internal/ui/views/podlist"
 )
 
@@ -57,6 +58,7 @@ type Model struct {
 	session   *Session
 	switching bool
 
+	namespaces    core.NamespaceLister
 	applier       apply.Runner
 	parseManifest apply.Parser
 	risk          func(server string) bool
@@ -101,6 +103,16 @@ func New(logger *zap.Logger, contexts core.ContextManager, pods core.PodReader, 
 // source, which is what the view tests use.
 func (m Model) WithSession(session *Session) (out Model) {
 	m.session = session
+	out = m
+
+	return out
+}
+
+// WithNamespaces enables the namespace picker. Without it, "N" does nothing and
+// ":ns <name>" remains the way to change namespace — which is all that works on
+// a cluster where listing namespaces is forbidden.
+func (m Model) WithNamespaces(lister core.NamespaceLister) (out Model) {
+	m.namespaces = lister
 	out = m
 
 	return out
@@ -173,6 +185,7 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.status.Width = msg.Width
+		m.cmdBar.SetWidth(msg.Width)
 		// Fall through so the visible view also learns the new size.
 
 	case ctxpicker.SwitchedMsg:
@@ -268,6 +281,11 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 		return m, cmd
 
+	case nspicker.SelectedMsg:
+		m.stack.Pop()
+
+		return m.switchNamespace(msg.Namespace)
+
 	case cmdbar.SubmitMsg:
 		return m.runCommand(msg.Command)
 
@@ -284,16 +302,20 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			return m, cmd
 		}
 
-		if key.Matches(msg, m.keys.Command) {
-			m.cmdBar.Open()
-
-			return m, cmd
-		}
-
 		focuser, ok := m.stack.Top().(inputFocuser)
 		typing := ok && focuser.InputFocused()
 
 		if !typing {
+			// ":" has to be inside the typing guard like every other global
+			// binding. Outside it, typing a column filter such as
+			// "status:running" opened the command bar mid-word and split the
+			// text across two inputs.
+			if key.Matches(msg, m.keys.Command) {
+				m.cmdBar.Open()
+
+				return m, cmd
+			}
+
 			if key.Matches(msg, m.keys.Quit) {
 				return m, tea.Quit
 			}
@@ -304,8 +326,14 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				return m, cmd
 			}
 
-			if msg.String() == "c" {
+			if key.Matches(msg, m.keys.Contexts) {
 				cmd = (&m).pushSized(ctxpicker.New(m.logger, m.styles, m.keys, m.contexts))
+
+				return m, cmd
+			}
+
+			if key.Matches(msg, m.keys.Namespaces) && m.namespaces != nil {
+				cmd = (&m).pushSized(nspicker.New(m.logger, m.styles, m.keys, m.namespaces, m.sel.Namespace))
 
 				return m, cmd
 			}
@@ -382,12 +410,29 @@ func (m Model) runCommand(c cmdbar.Command) (model tea.Model, cmd tea.Cmd) {
 
 // switchNamespace re-scopes the pod list. Task 12 replaces this with the full
 // teardown/resync sequence once sources are rebuilt per context.
+// switchNamespace re-scopes the pod list.
+//
+// This goes through the session rather than just changing the selector. The
+// informer is scoped to a namespace when it is built, so narrowing the selector
+// alone leaves it watching the old namespace and the list comes up empty — the
+// source has to be rebuilt for the new scope.
 func (m Model) switchNamespace(namespace string) (model tea.Model, cmd tea.Cmd) {
-	m.sel.Namespace = namespace
-	m.status.Namespace = namespace
-	m.stack.Replace(podlist.New(m.logger, m.styles, m.keys, m.pods, m.sel))
+	if m.session == nil {
+		// No factory wired (view tests): the selector is all there is.
+		m.sel.Namespace = namespace
+		m.status.Namespace = namespace
+		m.stack.Replace(podlist.New(m.logger, m.styles, m.keys, m.pods, m.sel))
 
-	cmd = m.stack.Top().Init()
+		cmd = m.stack.Top().Init()
+
+		return m, cmd
+	}
+
+	m.status.Connecting = true
+	m.status.Message = ""
+	m.switching = true
+
+	cmd = m.switchTo(m.status.Context, namespace)
 
 	return m, cmd
 }
@@ -404,7 +449,7 @@ func (m Model) View() (v tea.View) {
 		body = top.View().Content
 	}
 
-	help := m.styles.Help.Render("  " + keys.HelpLine(m.keys.Command, m.keys.Quit))
+	help := m.styles.Help.Render("  " + keys.HelpLine(m.keys.Contexts, m.keys.Namespaces, m.keys.Apply, m.keys.Command, m.keys.Quit))
 
 	bar := m.cmdBar.View()
 	if bar != "" {

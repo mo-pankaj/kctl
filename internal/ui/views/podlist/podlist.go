@@ -4,6 +4,7 @@ package podlist
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"charm.land/bubbles/v2/key"
@@ -57,6 +58,7 @@ type Model struct {
 	filter    textinput.Model
 	filtering bool
 	sortKey   SortKey
+	sortDir   SortDir
 	dirty     <-chan struct{}
 	err       error
 }
@@ -71,6 +73,8 @@ func New(logger *zap.Logger, styles theme.Styles, k keys.Map, reader core.PodRea
 		sel:    sel,
 		table:  buildTable(nil, sel.AllNamespaces()),
 	}
+
+	m.sortDir = DefaultDir(m.sortKey)
 
 	input := textinput.New()
 	input.Prompt = "/"
@@ -168,6 +172,11 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case tea.WindowSizeMsg:
 		// Leave room for the status bar, header, and help line.
 		m.table.SetHeight(maxInt(3, msg.Height-6))
+		m.table.SetWidth(msg.Width)
+		// Without a width the input renders wider than the terminal and wraps,
+		// which puts the tail of what you typed on the line above the prompt.
+		m.filter.SetWidth(maxInt(20, msg.Width-6))
+
 		return m, cmd
 
 	case tea.PasteMsg:
@@ -219,6 +228,16 @@ func (m Model) Update(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 		if key.Matches(msg, m.keys.SortCycle) {
 			m.sortKey = m.sortKey.Next()
+			// Each column starts in the direction that makes it useful, rather
+			// than inheriting whatever the previous column happened to be.
+			m.sortDir = DefaultDir(m.sortKey)
+			(&m).refresh()
+
+			return m, cmd
+		}
+
+		if key.Matches(msg, m.keys.SortReverse) {
+			m.sortDir = m.sortDir.Toggle()
 			(&m).refresh()
 
 			return m, cmd
@@ -281,12 +300,19 @@ func (m Model) View() (v tea.View) {
 	header := ""
 	if m.filtering || m.filter.Value() != "" {
 		header = "  " + m.filter.View() + "\n"
+
+		if m.filtering {
+			header += m.styles.Dimmed.Render("  columns: "+strings.Join(Columns(), " ")+"   e.g. status:crash") + "\n"
+		}
 	}
 
 	s = "\n" + header + m.table.View() + "\n" +
-		m.styles.Help.Render(fmt.Sprintf("  %d/%d pods  ·  sort:%s  ·  %s",
-			len(m.visible), len(m.pods), m.sortKey,
-			keys.HelpLine(m.keys.Filter, m.keys.SortCycle, m.keys.Select, m.keys.Describe, m.keys.Back))) + "\n"
+		m.styles.Help.Render(fmt.Sprintf("  %d/%d pods  ·  sort:%s%s  ·  %s",
+			len(m.visible), len(m.pods), m.sortKey, m.sortDir,
+			keys.HelpLine(
+				m.keys.Filter, m.keys.SortCycle, m.keys.SortReverse,
+				m.keys.Select, m.keys.Describe, m.keys.Back,
+			))) + "\n"
 
 	v = tea.NewView(s)
 	return v
@@ -294,7 +320,7 @@ func (m Model) View() (v tea.View) {
 
 // refresh recomputes the visible rows from the last cache read.
 func (m *Model) refresh() {
-	m.visible = Sort(Filter(m.pods, m.filter.Value()), m.sortKey)
+	m.visible = Sort(Filter(m.pods, m.filter.Value()), m.sortKey, m.sortDir)
 	m.table.SetRows(rowsFor(m.visible, m.sel.AllNamespaces(), time.Now()))
 }
 

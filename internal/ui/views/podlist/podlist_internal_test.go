@@ -142,3 +142,38 @@ func TestRetryIsInertWithoutAnError(t *testing.T) {
 		t.Fatal("retry issued a reload with no error present; it must be inert")
 	}
 }
+
+func TestColonTypesIntoTheFilterRatherThanEscapingIt(t *testing.T) {
+	pods := []core.Pod{
+		{Namespace: "ns1", Name: "api-1", Status: "Running"},
+		{Namespace: "ns1", Name: "api-2", Status: "CrashLoopBackOff"},
+	}
+
+	m := loaded(t, pods, 0)
+	m.filtering = true
+	m.filter.Focus()
+
+	// A column filter is mostly colons. If the view does not accept them the
+	// feature is unusable, and the root must not treat ":" as its command key
+	// while this input has focus.
+	for _, r := range "status:crash" {
+		updated, _ := m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+		m = updated.(Model)
+	}
+
+	if m.filter.Value() != "status:crash" {
+		t.Fatalf("filter value = %q, want the whole term including the colon", m.filter.Value())
+	}
+
+	if len(m.visible) != 1 || m.visible[0].Name != "api-2" {
+		t.Fatalf("visible = %v, want just the crashlooping pod", names(m.visible))
+	}
+}
+
+func names(pods []core.Pod) (out []string) {
+	for _, p := range pods {
+		out = append(out, p.Name)
+	}
+
+	return out
+}

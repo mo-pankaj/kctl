@@ -173,7 +173,8 @@ func run() (code int) {
 	}
 
 	model := ui.New(logger, store, active.Pods, core.Selector{Namespace: active.Namespace}).
-		WithSession(session)
+		WithSession(session).
+		WithNamespaces(active.Namespaces)
 
 	// The apply flow is optional: kctl is fully usable read-only if the
 	// applier cannot be built for this cluster.

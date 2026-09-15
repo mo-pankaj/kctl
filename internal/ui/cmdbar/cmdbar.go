@@ -46,6 +46,14 @@ func New(styles theme.Styles) (m Model) {
 	return m
 }
 
+// SetWidth sizes the input, so long commands scroll within the line instead of
+// wrapping onto the line above.
+func (m *Model) SetWidth(w int) {
+	if w > 8 {
+		m.input.SetWidth(w - 6)
+	}
+}
+
 // Open focuses the bar for input.
 func (m *Model) Open() {
 	m.open = true
