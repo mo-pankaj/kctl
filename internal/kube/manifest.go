@@ -2,6 +2,7 @@ package kube
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 
@@ -29,7 +30,9 @@ func ParseManifests(r io.Reader, defaultNamespace string) (docs []core.Manifest,
 		var raw map[string]interface{}
 
 		err = decoder.Decode(&raw)
-		if err == io.EOF {
+		// errors.Is, not ==: a wrapped EOF would otherwise fall through to the
+		// error branch and report a parse failure at the end of every file.
+		if errors.Is(err, io.EOF) {
 			err = nil
 
 			return docs, err

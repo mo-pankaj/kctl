@@ -1,0 +1,37 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - errcheck      # unchecked errors — this project's convention is explicit handling
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
+    - bodyclose     # log streams and API responses must be closed
+    - errorlint     # %w wrapping, which the error convention depends on
+    - nilerr        # returning nil after a non-nil error
+    - unconvert
+    - wastedassign
+
+  settings:
+    errcheck:
+      exclude-functions:
+        # Deliberate: the terminal is being torn down, nothing can act on a failure.
+        - (*go.uber.org/zap.Logger).Sync
+
+  exclusions:
+    rules:
+      # Generated code.
+      - path: internal/core/mocks/
+        linters: [errcheck, staticcheck, unused, revive]
+      # Tests may ignore setup errors that would only mask the real assertion.
+      - path: _test\.go
+        linters: [errcheck, bodyclose]
+
+formatters:
+  enable:
+    - gofmt

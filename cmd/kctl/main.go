@@ -3,8 +3,11 @@ package main
 
 import (
 	"context"
+	"errors"
+	"flag"
 	"fmt"
 	"os"
+	"runtime"
 	"runtime/debug"
 
 	tea "charm.land/bubbletea/v2"
@@ -16,6 +19,36 @@ import (
 	"github.com/mo-pankaj/kctl/internal/ui"
 )
 
+// Overridden at build time:
+//
+//	go build -ldflags "-X main.version=v0.1.0 -X main.commit=$(git rev-parse --short HEAD)"
+var (
+	version = "dev"
+	commit  = "none"
+)
+
+const usage = `kctl — a terminal UI for everyday kubectl work.
+
+Usage:
+  kctl [flags]
+
+Flags:
+  -context string   kube context to start in (default: the kubeconfig's current context)
+  -n, -namespace    namespace to start in (default: the context's namespace, "all" for every namespace)
+  -kubeconfig path  explicit kubeconfig path (default: $KUBECONFIG, then ~/.kube/config)
+  -version          print version and exit
+  -help             print this message
+
+Keys:
+  /  filter      s  sort        enter  logs      d  describe
+  a  apply       c  contexts    :  command       q  quit
+
+Config:
+  ~/.config/kctl/config.yaml    marks clusters protected by API server URL
+Logs:
+  written to the user cache dir; the UI never writes to the terminal
+`
+
 func main() {
 	code := run()
 	os.Exit(code)
@@ -23,6 +56,38 @@ func main() {
 
 // run holds the real body so deferred cleanup executes before os.Exit.
 func run() (code int) {
+	var (
+		flagContext    string
+		flagNamespace  string
+		flagKubeconfig string
+		flagVersion    bool
+	)
+
+	fs := flag.NewFlagSet("kctl", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	fs.Usage = func() { fmt.Fprint(os.Stderr, usage) }
+	fs.StringVar(&flagContext, "context", "", "kube context to start in")
+	fs.StringVar(&flagNamespace, "namespace", "", "namespace to start in")
+	fs.StringVar(&flagNamespace, "n", "", "namespace to start in (shorthand)")
+	fs.StringVar(&flagKubeconfig, "kubeconfig", "", "explicit kubeconfig path")
+	fs.BoolVar(&flagVersion, "version", false, "print version and exit")
+
+	err := fs.Parse(os.Args[1:])
+	if err != nil {
+		// flag already reported it; -help lands here too and is not a failure.
+		if errors.Is(err, flag.ErrHelp) {
+			return code
+		}
+
+		return 2
+	}
+
+	if flagVersion {
+		fmt.Printf("kctl %s (%s, %s/%s, %s)\n", version, commit, runtime.GOOS, runtime.GOARCH, runtime.Version())
+
+		return code
+	}
+
 	defer func() {
 		r := recover()
 		if r != nil {
@@ -40,25 +105,32 @@ func run() (code int) {
 	}
 	defer func() { _ = logger.Sync() }()
 
-	// Move fd 2 to the log file for the lifetime of the UI. kubeconfig exec
-	// credential plugins are subprocesses that write their failures to stderr,
-	// and klog does the same from in-process; either one prints over the
-	// rendered screen and leaves it unreadable.
-	restoreStderr, err := logging.RedirectStderr(logPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "kctl: %v\n", err)
-
-		return 1
-	}
-	defer restoreStderr()
-
-	store, err := kube.NewContextStore(logger, "")
+	store, err := kube.NewContextStore(logger, flagKubeconfig)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "kctl: %v\n", err)
 		return 1
 	}
 
 	current := store.Current()
+
+	if flagContext != "" {
+		err = store.Use(context.Background(), flagContext)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "kctl: %v\n", err)
+
+			return 1
+		}
+
+		current = store.Current()
+	}
+
+	startNamespace := current.Namespace
+	if flagNamespace != "" {
+		startNamespace = flagNamespace
+		if startNamespace == "all" {
+			startNamespace = ""
+		}
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -94,7 +166,7 @@ func run() (code int) {
 
 	// The session owns every source, including the first, so a later switch
 	// tears this one down instead of leaving it running for the whole session.
-	active, err := session.Switch(ctx, current.Name, current.Namespace)
+	active, err := session.Switch(ctx, current.Name, startNamespace)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "kctl: cannot reach cluster %s: %v\n", current.Server, err)
 		return 1
@@ -134,6 +206,18 @@ func run() (code int) {
 			logger.Warn("apply-disabled", zap.Error(aerr))
 		}
 	}
+
+	// Move fd 2 to the log file, but only now — every startup failure above
+	// still has to reach the user's terminal. kubeconfig exec credential
+	// plugins are subprocesses that write their failures to stderr, and klog
+	// does the same in-process; either prints over the rendered screen.
+	restoreStderr, err := logging.RedirectStderr(logPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "kctl: %v\n", err)
+
+		return 1
+	}
+	defer restoreStderr()
 
 	program := tea.NewProgram(model)
 

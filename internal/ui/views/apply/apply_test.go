@@ -232,7 +232,7 @@ func TestEscapeLeavesTheApplyViewFromEveryStage(t *testing.T) {
 
 	// Stage 1: the path input would otherwise swallow esc entirely, leaving the
 	// user stranded with no way back and no way to quit.
-	model, path := newModel(t, r, apply.Target{Context: "kind-dev"})
+	model, _ := newModel(t, r, apply.Target{Context: "kind-dev"})
 
 	for _, ch := range "some/typed/path" {
 		model, _ = press(model, ch)
@@ -248,8 +248,8 @@ func TestEscapeLeavesTheApplyViewFromEveryStage(t *testing.T) {
 	}
 
 	// Stage 2: the diff.
-	model, path = newModel(t, r, apply.Target{Context: "kind-dev"})
-	model = typePath(t, model, path)
+	model, diffPath := newModel(t, r, apply.Target{Context: "kind-dev"})
+	model = typePath(t, model, diffPath)
 
 	_, cmd = model.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	if cmd == nil {
@@ -261,8 +261,8 @@ func TestEscapeLeavesTheApplyViewFromEveryStage(t *testing.T) {
 	}
 
 	// Stage 3: the protected-cluster confirm input.
-	model, path = newModel(t, r, apply.Target{Context: "cnc-prod", Protected: true})
-	model = typePath(t, model, path)
+	model, confirmPath := newModel(t, r, apply.Target{Context: "cnc-prod", Protected: true})
+	model = typePath(t, model, confirmPath)
 	model, _ = press(model, 'y')
 
 	_, cmd = model.Update(tea.KeyPressMsg{Code: tea.KeyEscape})

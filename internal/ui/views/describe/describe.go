@@ -207,15 +207,15 @@ func (m Model) body() (s string) {
 				style = m.styles.StatusError
 			}
 
-			b.WriteString(fmt.Sprintf("  %-20s %s\n", c.Name, style.Render(state)))
-			b.WriteString(fmt.Sprintf("  %-20s %s\n", "", m.styles.Dimmed.Render(c.Image)))
+			fmt.Fprintf(&b, "  %-20s %s\n", c.Name, style.Render(state))
+			fmt.Fprintf(&b, "  %-20s %s\n", "", m.styles.Dimmed.Render(c.Image))
 
 			if c.RestartCount > 0 {
-				b.WriteString(fmt.Sprintf("  %-20s restarts: %d\n", "", c.RestartCount))
+				fmt.Fprintf(&b, "  %-20s restarts: %d\n", "", c.RestartCount)
 			}
 
 			if c.Message != "" {
-				b.WriteString(fmt.Sprintf("  %-20s %s\n", "", m.styles.Dimmed.Render(truncate(c.Message, 100))))
+				fmt.Fprintf(&b, "  %-20s %s\n", "", m.styles.Dimmed.Render(truncate(c.Message, 100)))
 			}
 		}
 	}

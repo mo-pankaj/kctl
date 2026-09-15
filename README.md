@@ -22,8 +22,16 @@ switch contexts and namespaces without retyping them.
 Requires Go 1.26.
 
 ```bash
-go build -o kctl ./cmd/kctl
+make build     # or: go build -o kctl ./cmd/kctl
 ./kctl
+```
+
+```
+kctl -help                      # keys, flags, config location
+kctl -version
+kctl -context dev-01            # start somewhere specific
+kctl -n kube-system             # or "-n all" for every namespace
+kctl -kubeconfig /path/to/file
 ```
 
 kctl opens on whatever context your kubeconfig currently points at, scoped to that

@@ -194,8 +194,8 @@ func (s *PodSource) Pods(ctx context.Context, sel core.Selector) (pods []core.Po
 	}
 
 	var items []*corev1.Pod
-	switch {
-	case sel.Namespace == "":
+	switch sel.Namespace {
+	case "":
 		items, err = s.lister.List(selector)
 
 	default:
